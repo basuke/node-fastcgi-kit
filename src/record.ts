@@ -81,3 +81,7 @@ export function encode(
 
     return buffer;
 }
+
+export function decode(...buffers: Buffer[]): FCGIRecord | false {
+    return false;
+}
