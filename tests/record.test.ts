@@ -1,31 +1,32 @@
 import { createEncoder } from '../src/encoder';
 import { Type, makeRecord, setBody, encode } from '../src/record';
+import { bytestr as B } from '../src/utils';
 
 function b(...bytes: number[]): Buffer {
     return Buffer.from(bytes);
 }
 
-describe('record.encode', () => {
-    test('encode simple request', () => {
+describe('encode record', () => {
+    test('simple request', () => {
         const record = makeRecord(Type.FCGI_UNKNOWN_TYPE);
-        expect(encode(record)).toEqual(b(1, 11, 0, 0, 0, 0, 0, 0));
+        expect(encode(record)).toEqual(B`01 0b 0000 0000 00 00`);
     });
 
-    test('encode request with body', () => {
+    test('request with body', () => {
         const record = makeRecord(Type.FCGI_UNKNOWN_TYPE);
         record.requestId = 258;
         setBody(record, b(0, 1, 2));
         expect(encode(record)).toEqual(
-            b(1, 11, 1, 2, 0, 3, 5, 0, 0, 1, 2, 0, 0, 0, 0, 0)
+            B`01 0B 0102 0003 05 00 00010200 00000000`
         );
     });
 
-    test('encode request with string body', () => {
+    test('request with string body', () => {
         const record = makeRecord(Type.FCGI_UNKNOWN_TYPE);
         record.requestId = 259;
         setBody(record, 'Hello');
         expect(encode(record)).toEqual(
-            b(1, 11, 1, 3, 0, 5, 3, 0, 0x48, 0x65, 0x6c, 0x6c, 0x6f, 0, 0, 0)
+            B`01 0b 0103 0005 03 00 ${'Hello'} 000000`
         );
     });
 });

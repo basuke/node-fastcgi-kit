@@ -1,4 +1,4 @@
-import { alignedSize, hiByte, loByte } from '../src/utils';
+import { alignedSize, bytestr as B, hiByte, loByte } from '../src/utils';
 
 describe('alignedSize', () => {
     test('works with same size', () => {
@@ -49,5 +49,31 @@ describe('loByte', () => {
         expect(loByte(256)).toBe(0);
         expect(loByte(513)).toBe(1);
         expect(loByte(1026)).toBe(2);
+    });
+});
+
+describe('bytestr', () => {
+    test('basic', () => {
+        expect(B`00`).toEqual(Buffer.alloc(1));
+        expect(B`01`).toEqual(Buffer.from([1]));
+        expect(B`000103`).toEqual(Buffer.from([0, 1, 3]));
+    });
+
+    test('allow space', () => {
+        expect(B`00 01 03`).toEqual(Buffer.from([0, 1, 3]));
+    });
+
+    test('does not allow weird space', () => {
+        expect(() => B`000 103`).toThrow();
+    });
+
+    test('does not allow odd digits', () => {
+        expect(() => B`000`).toThrow();
+    });
+
+    test('allow expression', () => {
+        expect(B`00${'Hello'}00`).toEqual(
+            Buffer.from([0, 0x48, 0x65, 0x6c, 0x6c, 0x6f, 0])
+        );
     });
 });
