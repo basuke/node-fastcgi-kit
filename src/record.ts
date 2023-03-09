@@ -16,7 +16,7 @@ export enum Type {
 
 export const defaultAlignment = 8;
 
-export class Record {
+export class FCGIRecord {
     type: Type;
     requestId: number = 0;
     body: Buffer | null = null;

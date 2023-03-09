@@ -1,5 +1,5 @@
 import { FCGIHeaderLength, FCGIMaxBody } from './constants';
-import { Record } from './record';
+import { FCGIRecord } from './record';
 
 enum State {
     HEADER = 0,
@@ -9,7 +9,7 @@ enum State {
 
 export interface Parser {
     fead(data: Buffer): void;
-    on(event: 'record', listener: (record: Record) => void): void;
+    on(event: 'record', listener: (record: FCGIRecord) => void): void;
 }
 
 export function createParser() {
@@ -23,7 +23,7 @@ export class ParserImpl {
 
     state: State = State.HEADER;
     loc: number = 0;
-    record: Record = new Record();
+    record: FCGIRecord = new FCGIRecord();
 
     constructor() {
         this.header = Buffer.alloc(FCGIHeaderLength);
@@ -33,7 +33,7 @@ export class ParserImpl {
     reset() {
         this.state = State.HEADER;
         this.loc = 0;
-        this.record = new Record();
+        this.record = new FCGIRecord();
     }
 
     execute(buffer: Buffer, start: number = 0, end: number | null = null) {}

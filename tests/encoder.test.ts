@@ -1,5 +1,5 @@
 import { createEncoder } from '../src/encoder';
-import { Record, Type } from '../src/record';
+import { FCGIRecord, Type } from '../src/record';
 
 function b(...bytes: number[]): Buffer {
     return Buffer.from(bytes);
@@ -7,12 +7,12 @@ function b(...bytes: number[]): Buffer {
 
 describe('record.encode', () => {
     test('encode simple request', () => {
-        const record = new Record(Type.FCGI_UNKNOWN_TYPE);
+        const record = new FCGIRecord(Type.FCGI_UNKNOWN_TYPE);
         expect(record.encode()).toEqual(b(1, 11, 0, 0, 0, 0, 0, 0));
     });
 
     test('encode request with body', () => {
-        const record = new Record(Type.FCGI_UNKNOWN_TYPE);
+        const record = new FCGIRecord(Type.FCGI_UNKNOWN_TYPE);
         record.requestId = 258;
         record.setBody(b(0, 1, 2));
         expect(record.encode()).toEqual(
@@ -21,7 +21,7 @@ describe('record.encode', () => {
     });
 
     test('encode request with string body', () => {
-        const record = new Record(Type.FCGI_UNKNOWN_TYPE);
+        const record = new FCGIRecord(Type.FCGI_UNKNOWN_TYPE);
         record.requestId = 259;
         record.setBody('Hello');
         expect(record.encode()).toEqual(
@@ -38,7 +38,7 @@ describe('record.encode', () => {
 //         buffers.push(blob);
 //     });
 
-//     const record = new Record(Type.FCGI_UNKNOWN_TYPE);
+//     const record = new FCGIRecord(Type.FCGI_UNKNOWN_TYPE);
 //     encoder.feed(record);
 //     expect(buffers).toEqual([b(0, 11, 0, 0, 0, 0, 0, 0)]);
 // });
