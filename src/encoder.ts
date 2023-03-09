@@ -1,5 +1,13 @@
 import { Record } from './record';
-import EventEmitter from 'events';
+import { EventEmitter } from 'node:events';
+import { Buffer } from 'node:buffer';
+
+export function encodeRecord(record: Record): Buffer {
+    let size = 8;
+    if (record.body) {
+    }
+    const buffer = Buffer.alloc(size);
+}
 
 export interface Encoder {
     feed(record: Record): void;
