@@ -8,15 +8,24 @@ function b(...bytes: number[]): Buffer {
 describe('record.encode', () => {
     test('encode simple request', () => {
         const record = new Record(Type.FCGI_UNKNOWN_TYPE);
-        expect(record.encode(8)).toEqual(b(1, 11, 0, 0, 0, 0, 0, 0));
+        expect(record.encode()).toEqual(b(1, 11, 0, 0, 0, 0, 0, 0));
     });
 
     test('encode request with body', () => {
         const record = new Record(Type.FCGI_UNKNOWN_TYPE);
         record.requestId = 258;
-        record.body = b(0, 1, 2);
-        expect(record.encode(8)).toEqual(
+        record.setBody(b(0, 1, 2));
+        expect(record.encode()).toEqual(
             b(1, 11, 1, 2, 0, 3, 5, 0, 0, 1, 2, 0, 0, 0, 0, 0)
+        );
+    });
+
+    test('encode request with string body', () => {
+        const record = new Record(Type.FCGI_UNKNOWN_TYPE);
+        record.requestId = 259;
+        record.setBody('Hello');
+        expect(record.encode()).toEqual(
+            b(1, 11, 1, 3, 0, 5, 3, 0, 0x48, 0x65, 0x6c, 0x6c, 0x6f, 0, 0, 0)
         );
     });
 });

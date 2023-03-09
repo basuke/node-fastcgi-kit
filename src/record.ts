@@ -14,6 +14,8 @@ export enum Type {
     FCGI_UNKNOWN_TYPE,
 }
 
+export const defaultAlignment = 8;
+
 export class Record {
     type: Type;
     requestId: number = 0;
@@ -39,7 +41,7 @@ export class Record {
         return size;
     }
 
-    encode(alignment: number): Buffer {
+    encode(alignment: number = defaultAlignment): Buffer {
         if (alignment > 256) {
             throw new RangeError('alignment > 256');
         }
