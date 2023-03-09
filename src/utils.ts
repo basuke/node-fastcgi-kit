@@ -10,6 +10,10 @@ export function loByte(val: number): number {
     return val & 0xff;
 }
 
+export function word(hi: number, lo: number): number {
+    return (hi << 8) + lo;
+}
+
 export function bytestr(
     strs: TemplateStringsArray,
     ...exprs: (string | number | number[])[]

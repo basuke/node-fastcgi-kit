@@ -1,4 +1,4 @@
-import { alignedSize, bytestr as B, hiByte, loByte } from '../src/utils';
+import { alignedSize, bytestr as B, hiByte, loByte, word } from '../src/utils';
 
 describe('alignedSize', () => {
     test('works with same size', () => {
@@ -49,6 +49,12 @@ describe('loByte', () => {
         expect(loByte(256)).toBe(0);
         expect(loByte(513)).toBe(1);
         expect(loByte(1026)).toBe(2);
+    });
+});
+
+describe('word', () => {
+    test('basic', () => {
+        expect(word(1, 1)).toBe(257);
     });
 });
 

@@ -1,4 +1,4 @@
-import { alignedSize, hiByte, loByte } from './utils';
+import { alignedSize, hiByte, loByte, word } from './utils';
 
 export enum Type {
     FCGI_BEGIN_REQUEST = 1,
@@ -20,6 +20,14 @@ export interface FCGIRecord {
     type: Type;
     requestId: number;
     body: Buffer | null;
+}
+
+export interface Header {
+    version: number;
+    type: Type;
+    requestId: number;
+    contentLength: number;
+    paddingLength: number;
 }
 
 export function makeRecord(type: Type): FCGIRecord {
@@ -82,6 +90,46 @@ export function encode(
     return buffer;
 }
 
-export function decode(...buffers: Buffer[]): FCGIRecord | false {
-    return false;
+export function decodeHeader(buffer: Buffer): Header | undefined {
+    if (buffer.byteLength < 8) {
+        return undefined;
+    }
+    const version = buffer[0];
+    const type = buffer[1];
+    const requestId = word(buffer[2], buffer[3]);
+    const contentLength = word(buffer[4], buffer[5]);
+    const paddingLength = buffer[6];
+    const reserved = buffer[7];
+    return {
+        version,
+        type,
+        requestId,
+        contentLength,
+        paddingLength,
+    };
+}
+
+function recordSize(header: Header): number {
+    return 8 + header.contentLength + header.paddingLength;
+}
+
+export function decodableSize(buffer: Buffer): number | undefined {
+    const header = decodeHeader(buffer);
+    if (!header) {
+        return undefined;
+    }
+    const expectedSize = recordSize(header);
+    return buffer.byteLength >= expectedSize ? expectedSize : undefined;
+}
+
+export function decode(buffer: Buffer): FCGIRecord {
+    const header = decodeHeader(buffer);
+    if (!header) {
+        throw new RangeError('buffer too short');
+    }
+    const expectedSize = recordSize(header);
+    if (buffer.byteLength < expectedSize) {
+        throw new RangeError('buffer too short');
+    }
+    return makeRecord(header.type);
 }
