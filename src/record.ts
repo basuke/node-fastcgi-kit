@@ -32,11 +32,15 @@ export interface Header {
     paddingLength: number;
 }
 
-export function makeRecord(type: Type): FCGIRecord {
+export function makeRecord(
+    type: Type,
+    requestId: number = 0,
+    body: Buffer | null = null
+): FCGIRecord {
     return {
         type,
-        requestId: 0,
-        body: null,
+        requestId,
+        body,
     };
 }
 
