@@ -57,6 +57,12 @@ describe('decoding record', () => {
         expect(record.body).toBeNull();
         expect(record.type).toBe(Type.FCGI_UNKNOWN_TYPE);
         expect(record.requestId).toBe(0);
+
+        record = decode(B`01 0b 0001 0003 05 00 0001 0203 04ff ffff`);
+        expect(record).not.toBeNull();
+        expect(record.body).toEqual(B`00 01 02`);
+        expect(record.type).toBe(Type.FCGI_UNKNOWN_TYPE);
+        expect(record.requestId).toBe(1);
     });
 });
 

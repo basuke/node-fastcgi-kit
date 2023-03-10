@@ -16,6 +16,8 @@ export enum Type {
 
 export const defaultAlignment = 8;
 
+const headerSize = 8;
+
 export interface FCGIRecord {
     type: Type;
     requestId: number;
@@ -50,7 +52,7 @@ export function setBody(
 }
 
 export function encodedSize(record: FCGIRecord): number {
-    let size = 8;
+    let size = headerSize;
     if (record.body) {
         size += record.body.byteLength;
     }
@@ -84,14 +86,14 @@ export function encode(
     buffer[7] = 0; // reserved
 
     if (record.body) {
-        record.body.copy(buffer, 8);
+        record.body.copy(buffer, headerSize);
     }
 
     return buffer;
 }
 
 export function decodeHeader(buffer: Buffer): Header | undefined {
-    if (buffer.byteLength < 8) {
+    if (buffer.byteLength < headerSize) {
         return undefined;
     }
     const version = buffer[0];
@@ -110,7 +112,7 @@ export function decodeHeader(buffer: Buffer): Header | undefined {
 }
 
 function recordSize(header: Header): number {
-    return 8 + header.contentLength + header.paddingLength;
+    return headerSize + header.contentLength + header.paddingLength;
 }
 
 export function decodableSize(buffer: Buffer): number | undefined {
@@ -131,5 +133,14 @@ export function decode(buffer: Buffer): FCGIRecord {
     if (buffer.byteLength < expectedSize) {
         throw new RangeError('buffer too short');
     }
-    return makeRecord(header.type);
+
+    const record = makeRecord(header.type);
+    record.requestId = header.requestId;
+    if (header.contentLength > 0) {
+        setBody(
+            record,
+            buffer.subarray(headerSize, headerSize + header.contentLength)
+        );
+    }
+    return record;
 }
