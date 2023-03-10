@@ -45,3 +45,9 @@ export function bytestr(
     }
     return Buffer.from(bytes);
 }
+
+export function tick() {
+    return new Promise((resolve) => {
+        setTimeout(resolve, 17);
+    });
+}

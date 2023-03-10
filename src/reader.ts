@@ -1,40 +1,21 @@
-import { FCGIHeaderLength, FCGIMaxBody } from './constants';
-import { FCGIRecord } from './record';
+import { decodableSize, decode, FCGIRecord } from './record';
+import { Writable, TransformCallback } from 'node:stream';
 
-enum State {
-    HEADER = 0,
-    BODY,
-    PADDING,
-}
-
-export interface Parser {
-    fead(data: Buffer): void;
-    on(event: 'record', listener: (record: FCGIRecord) => void): void;
-}
-
-export function createParser() {
-    return new ParserImpl();
-}
-
-export class ParserImpl {
-    encoding: string = 'utf8';
-    header: Buffer;
-    body: Buffer;
-
-    state: State = State.HEADER;
-    loc: number = 0;
-    record: FCGIRecord = new FCGIRecord();
-
-    constructor() {
-        this.header = Buffer.alloc(FCGIHeaderLength);
-        this.body = Buffer.alloc(FCGIMaxBody);
+export class Reader extends Writable {
+    _write(
+        chunk: Buffer,
+        _: BufferEncoding,
+        callback: (error?: Error | null | undefined) => void
+    ): void {
+        while (chunk.byteLength > 0) {
+            const length = decodableSize(chunk);
+            if (!length || length > chunk.byteLength) {
+                break;
+            }
+            const record = decode(chunk);
+            chunk = chunk.subarray(length);
+            this.emit('record', record);
+        }
+        callback();
     }
-
-    reset() {
-        this.state = State.HEADER;
-        this.loc = 0;
-        this.record = new FCGIRecord();
-    }
-
-    execute(buffer: Buffer, start: number = 0, end: number | null = null) {}
 }
