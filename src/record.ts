@@ -1,4 +1,5 @@
 import { alignedSize, hiByte, loByte, word } from './utils';
+import { Readable } from 'node:stream';
 
 export enum Type {
     FCGI_BEGIN_REQUEST = 1,
@@ -18,10 +19,15 @@ export const defaultAlignment = 8;
 
 const headerSize = 8;
 
+export type ReadableWithLength = {
+    length: number;
+    stream: Readable;
+};
+
 export interface FCGIRecord {
     type: Type;
     requestId: number;
-    body: Buffer | null;
+    body: Buffer | ReadableWithLength | null;
 }
 
 export interface Header {
@@ -35,7 +41,7 @@ export interface Header {
 export function makeRecord(
     type: Type,
     requestId: number = 0,
-    body: Buffer | null = null
+    body: Buffer | ReadableWithLength | null = null
 ): FCGIRecord {
     return {
         type,
@@ -55,12 +61,17 @@ export function setBody(
     }
 }
 
-export function encodedSize(record: FCGIRecord): number {
-    let size = headerSize;
-    if (record.body) {
-        size += record.body.byteLength;
+export function contentSize(record: FCGIRecord): number {
+    const body = record.body;
+    if (!body) return 0;
+    if (body instanceof Buffer) {
+        return body.byteLength;
     }
-    return size;
+    return body.length;
+}
+
+export function encodedSize(record: FCGIRecord): number {
+    return headerSize + contentSize(record);
 }
 
 export function encode(
@@ -74,7 +85,7 @@ export function encode(
     const size = encodedSize(record);
     const padding = alignedSize(size, alignment) - size;
     const buffer = Buffer.alloc(size + padding);
-    const length = record.body ? record.body.byteLength : 0;
+    const length = contentSize(record);
 
     if (length >= 0x10000) {
         throw new RangeError('body must be < 0x10000');
@@ -89,7 +100,7 @@ export function encode(
     buffer[6] = padding; // paddingLength
     buffer[7] = 0; // reserved
 
-    if (record.body) {
+    if (record.body && record.body instanceof Buffer) {
         record.body.copy(buffer, headerSize);
     }
 

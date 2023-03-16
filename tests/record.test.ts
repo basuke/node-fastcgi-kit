@@ -1,4 +1,3 @@
-import { createEncoder } from '../src/encoder';
 import {
     Type,
     makeRecord,
@@ -65,16 +64,3 @@ describe('decoding record', () => {
         expect(record.requestId).toBe(1);
     });
 });
-
-// test('Encode begin request', () => {
-//     const buffers: Buffer[] = [];
-
-//     const encoder = createEncoder();
-//     encoder.on('data', (blob: Buffer): void => {
-//         buffers.push(blob);
-//     });
-
-//     const record = makeRecord(Type.FCGI_UNKNOWN_TYPE);
-//     encoder.feed(record);
-//     expect(buffers).toEqual([b(0, 11, 0, 0, 0, 0, 0, 0)]);
-// });
