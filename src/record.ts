@@ -78,6 +78,12 @@ export function getStream(record: FCGIRecord): ReadableWithLength | null {
         : null;
 }
 
+export function paddingSize(record: FCGIRecord, alignment: number): number {
+    const length = contentSize(record);
+    const totalSize = headerSize + length;
+    return alignedSize(totalSize, alignment) - totalSize;
+}
+
 export function encode(
     record: FCGIRecord,
     alignment: number = defaultAlignment
@@ -92,12 +98,10 @@ export function encode(
     }
 
     const withBody = record.body instanceof Buffer;
+    const padding = paddingSize(record, alignment);
 
-    const totalSize = headerSize + length;
-    const padding = alignedSize(totalSize, alignment) - totalSize;
-
-    const bufferSize = headerSize + (withBody ? length : 0);
-    const buffer = Buffer.alloc(bufferSize + padding);
+    const bufferSize = headerSize + (withBody ? length + padding : 0);
+    const buffer = Buffer.alloc(bufferSize);
 
     buffer[0] = 1; // version
     buffer[1] = record.type; // type

@@ -1,4 +1,10 @@
-import { encode, FCGIRecord, defaultAlignment, getStream } from './record';
+import {
+    encode,
+    FCGIRecord,
+    defaultAlignment,
+    getStream,
+    paddingSize,
+} from './record';
 import { Writable } from 'node:stream';
 
 export interface Writer {
@@ -39,7 +45,6 @@ class WriterImpl implements Writer {
             };
 
             stream.on('data', (chunk: any) => {
-                console.log(chunk);
                 if (chunk instanceof Buffer) {
                     processChunk(chunk);
                 } else if (typeof chunk === 'string') {
@@ -60,6 +65,11 @@ class WriterImpl implements Writer {
                         'error',
                         new Error('WriterImpl::write: Not enough data is sent')
                     );
+                }
+
+                const padding = paddingSize(record, this.alignment);
+                if (padding > 0) {
+                    this.writable.write(Buffer.allocUnsafe(padding));
                 }
             });
         }
