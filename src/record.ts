@@ -52,7 +52,7 @@ export function makeRecord(
 
 export function setBody(
     record: FCGIRecord,
-    body: string | Buffer | null
+    body: string | Buffer | ReadableWithLength | null
 ): void {
     if (typeof body === 'string') {
         record.body = Buffer.from(body);
@@ -70,8 +70,12 @@ export function contentSize(record: FCGIRecord): number {
     return body.length;
 }
 
-export function encodedSize(record: FCGIRecord): number {
-    return headerSize + contentSize(record);
+export function getStream(record: FCGIRecord): ReadableWithLength | null {
+    return record.body &&
+        typeof record.body === 'object' &&
+        'stream' in record.body
+        ? record.body
+        : null;
 }
 
 export function encode(
@@ -79,17 +83,21 @@ export function encode(
     alignment: number = defaultAlignment
 ): Buffer {
     if (alignment > 256) {
-        throw new RangeError('alignment > 256');
+        throw new RangeError('alignment must be <= 256');
     }
 
-    const size = encodedSize(record);
-    const padding = alignedSize(size, alignment) - size;
-    const buffer = Buffer.alloc(size + padding);
     const length = contentSize(record);
-
     if (length >= 0x10000) {
         throw new RangeError('body must be < 0x10000');
     }
+
+    const withBody = record.body instanceof Buffer;
+
+    const totalSize = headerSize + length;
+    const padding = alignedSize(totalSize, alignment) - totalSize;
+
+    const bufferSize = headerSize + (withBody ? length : 0);
+    const buffer = Buffer.alloc(bufferSize + padding);
 
     buffer[0] = 1; // version
     buffer[1] = record.type; // type
@@ -100,7 +108,7 @@ export function encode(
     buffer[6] = padding; // paddingLength
     buffer[7] = 0; // reserved
 
-    if (record.body && record.body instanceof Buffer) {
+    if (record.body instanceof Buffer && record.body.byteLength > 0) {
         record.body.copy(buffer, headerSize);
     }
 

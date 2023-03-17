@@ -1,4 +1,4 @@
-import { encode, FCGIRecord, defaultAlignment } from './record';
+import { encode, FCGIRecord, defaultAlignment, getStream } from './record';
 import { Writable } from 'node:stream';
 
 export interface Writer {
@@ -16,8 +16,53 @@ class WriterImpl implements Writer {
     }
 
     write(record: FCGIRecord) {
-        const buffer = encode(record, this.alignment);
-        this.writable.write(buffer);
+        const header = encode(record, this.alignment);
+        this.writable.write(header);
+
+        const readable = getStream(record);
+        if (readable) {
+            const { stream, length: size } = readable;
+            let readSize = 0;
+
+            const processChunk = (chunk: Buffer) => {
+                if (readSize + chunk.byteLength > size) {
+                    stream.emit(
+                        'error',
+                        new Error(
+                            'WriterImpl::write: More data is sent to stream'
+                        )
+                    );
+                    return;
+                }
+                readSize += chunk.byteLength;
+                this.writable.write(chunk);
+            };
+
+            stream.on('data', (chunk: any) => {
+                console.log(chunk);
+                if (chunk instanceof Buffer) {
+                    processChunk(chunk);
+                } else if (typeof chunk === 'string') {
+                    processChunk(Buffer.from(chunk));
+                } else {
+                    stream.emit(
+                        'error',
+                        new TypeError(
+                            'WriterImpl::write: Only Buffer or string in Readable'
+                        )
+                    );
+                }
+            });
+
+            stream.on('end', () => {
+                if (readSize != size) {
+                    stream.emit(
+                        'error',
+                        new Error('WriterImpl::write: Not enough data is sent')
+                    );
+                }
+            });
+        }
     }
 }
 
