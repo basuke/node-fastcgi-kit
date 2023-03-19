@@ -6,7 +6,7 @@ export class Reader extends Writable {
     remaining: Buffer | null = null;
 
     // Param stream
-    params: Pairs | null = null;
+    params: [Buffer | null, Pairs] | null = null;
 
     _write(
         chunk: Buffer,
@@ -35,21 +35,33 @@ export class Reader extends Writable {
 
     decodeRecord(chunk: Buffer): FCGIRecord | null {
         const record = decode(chunk);
-        switch (record.type) {
-            case Type.FCGI_PARAMS:
-                return this.decodeParams(record);
+        if (record.type === Type.FCGI_PARAMS) {
+            return this.decodeParams(record);
+        } else {
+            if (this.params) {
+                this.emit(
+                    'error',
+                    new Error(
+                        'Reader::decodeRecord: Cannot receive other record while processing FCGI_PARAMS stream.'
+                    )
+                );
+                return null;
+            }
+            return record;
         }
-        return record;
     }
 
     decodeParams(record: FCGIRecord): FCGIRecord | null {
-        const pairs: Pairs = this.params ?? {};
+        const [leftover, pairs] = this.params ?? [null, {}];
         this.params = null;
 
         if (record.body instanceof Buffer) {
-            decodePairs(record.body, pairs);
-            if (Object.keys(pairs).length > 0) {
-                this.params = pairs;
+            const buffer = leftover
+                ? Buffer.concat([leftover, record.body])
+                : record.body;
+            const remaining = decodePairs(buffer, pairs);
+            if (Object.keys(pairs).length > 0 || remaining) {
+                this.params = [remaining, pairs];
                 return null;
             }
         }
