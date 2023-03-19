@@ -1,4 +1,11 @@
-import { encode, FCGIRecord, defaultAlignment, setBody } from './record';
+import {
+    encode,
+    FCGIRecord,
+    defaultAlignment,
+    setBody,
+    paddingSize,
+    maxContentLength,
+} from './record';
 import { Readable, Writable } from 'node:stream';
 
 export interface Writer {
@@ -17,23 +24,29 @@ class WriterImpl implements Writer {
 
     write(record: FCGIRecord, stream?: Readable, length?: number) {
         if (stream) {
-            const size = length ?? 0;
-
+            const originalSize = length ?? 0;
             let readSize = 0;
 
             const processChunk = (chunk: Buffer) => {
-                if (readSize + chunk.byteLength > size) {
-                    stream.emit(
-                        'error',
-                        new Error(
-                            'WriterImpl::write: More data is sent to stream'
-                        )
-                    );
-                    return;
-                }
+                const limit = this.safeMaxContentSize();
 
-                setBody(record, chunk);
-                this.stream.write(encode(record, this.alignment));
+                let offset = 0;
+                while (offset < chunk.byteLength) {
+                    const body = chunk.subarray(offset, offset + limit);
+                    setBody(record, body);
+
+                    this.stream.write(encode(record, this.alignment, true));
+                    this.stream.write(record.body);
+
+                    const padding = paddingSize(
+                        body.byteLength,
+                        this.alignment
+                    );
+                    if (padding > 0) {
+                        this.stream.write(Buffer.allocUnsafe(padding));
+                    }
+                    offset += body.byteLength;
+                }
 
                 readSize += chunk.byteLength;
             };
@@ -54,10 +67,12 @@ class WriterImpl implements Writer {
             });
 
             stream.on('end', () => {
-                if (readSize != size) {
+                if (readSize !== originalSize) {
                     stream.emit(
                         'error',
-                        new Error('WriterImpl::write: Not enough data is sent')
+                        new Error(
+                            `WriterImpl::write: Invalid size of data is sent. content-length: ${originalSize} readSize: ${readSize}`
+                        )
                     );
                 }
             });
@@ -65,6 +80,12 @@ class WriterImpl implements Writer {
             const header = encode(record, this.alignment);
             this.stream.write(header);
         }
+    }
+
+    safeMaxContentSize() {
+        const padding = paddingSize(maxContentLength, this.alignment);
+        if (padding === 0) return maxContentLength;
+        return maxContentLength + padding - this.alignment;
     }
 }
 

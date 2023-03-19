@@ -1,5 +1,4 @@
 import { alignedSize, hiByte, loByte, word } from './utils';
-import { Readable } from 'node:stream';
 
 export enum Type {
     FCGI_BEGIN_REQUEST = 1,
@@ -16,8 +15,8 @@ export enum Type {
 }
 
 export const defaultAlignment = 8;
-
-const headerSize = 8;
+export const maxContentLength = 0xffff;
+export const headerSize = 8;
 
 export interface FCGIRecord {
     type: Type;
@@ -70,7 +69,8 @@ export function paddingSize(contentLength: number, alignment: number): number {
 
 export function encode(
     record: FCGIRecord,
-    alignment: number = defaultAlignment
+    alignment: number = defaultAlignment,
+    headerOnly: boolean = false
 ): Buffer {
     if (alignment > 256) {
         throw new RangeError('alignment must be <= 256');
@@ -81,7 +81,7 @@ export function encode(
         throw new RangeError('body must be < 0x10000');
     }
 
-    const withBody = record.body instanceof Buffer;
+    const withBody = !headerOnly && record.body instanceof Buffer;
     const padding = paddingSize(length, alignment);
 
     const bufferSize = headerSize + (withBody ? length + padding : 0);
@@ -96,7 +96,11 @@ export function encode(
     buffer[6] = padding; // paddingLength
     buffer[7] = 0; // reserved
 
-    if (record.body instanceof Buffer && record.body.byteLength > 0) {
+    if (
+        !headerOnly &&
+        record.body instanceof Buffer &&
+        record.body.byteLength > 0
+    ) {
         record.body.copy(buffer, headerSize);
     }
 
