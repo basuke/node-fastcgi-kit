@@ -19,15 +19,10 @@ export const defaultAlignment = 8;
 
 const headerSize = 8;
 
-export type ReadableWithLength = {
-    length: number;
-    stream: Readable;
-};
-
 export interface FCGIRecord {
     type: Type;
     requestId: number;
-    body: Buffer | ReadableWithLength | null;
+    body: Buffer | null;
 }
 
 export interface Header {
@@ -41,7 +36,7 @@ export interface Header {
 export function makeRecord(
     type: Type,
     requestId: number = 0,
-    body: Buffer | ReadableWithLength | null = null
+    body: Buffer | null = null
 ): FCGIRecord {
     return {
         type,
@@ -52,7 +47,7 @@ export function makeRecord(
 
 export function setBody(
     record: FCGIRecord,
-    body: string | Buffer | ReadableWithLength | null
+    body: string | Buffer | null
 ): void {
     if (typeof body === 'string') {
         record.body = Buffer.from(body);
@@ -62,25 +57,14 @@ export function setBody(
 }
 
 export function contentSize(record: FCGIRecord): number {
-    const body = record.body;
-    if (!body) return 0;
-    if (body instanceof Buffer) {
-        return body.byteLength;
+    if (record.body instanceof Buffer) {
+        return record.body.byteLength;
     }
-    return body.length;
+    return 0;
 }
 
-export function getStream(record: FCGIRecord): ReadableWithLength | null {
-    return record.body &&
-        typeof record.body === 'object' &&
-        'stream' in record.body
-        ? record.body
-        : null;
-}
-
-export function paddingSize(record: FCGIRecord, alignment: number): number {
-    const length = contentSize(record);
-    const totalSize = headerSize + length;
+export function paddingSize(contentLength: number, alignment: number): number {
+    const totalSize = headerSize + contentLength;
     return alignedSize(totalSize, alignment) - totalSize;
 }
 
@@ -98,7 +82,7 @@ export function encode(
     }
 
     const withBody = record.body instanceof Buffer;
-    const padding = paddingSize(record, alignment);
+    const padding = paddingSize(length, alignment);
 
     const bufferSize = headerSize + (withBody ? length + padding : 0);
     const buffer = Buffer.alloc(bufferSize);

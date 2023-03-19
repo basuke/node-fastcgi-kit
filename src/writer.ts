@@ -1,33 +1,24 @@
-import {
-    encode,
-    FCGIRecord,
-    defaultAlignment,
-    getStream,
-    paddingSize,
-} from './record';
-import { Writable } from 'node:stream';
+import { encode, FCGIRecord, defaultAlignment, setBody } from './record';
+import { Readable, Writable } from 'node:stream';
 
 export interface Writer {
-    alignment: number;
-    write: (record: FCGIRecord) => void;
+    readonly alignment: number;
+    write: (record: FCGIRecord, stream?: Readable, length?: number) => void;
 }
 
 class WriterImpl implements Writer {
-    writable: Writable;
+    stream: Writable;
     alignment: number;
 
-    constructor(writable: Writable, alignment: number) {
-        this.writable = writable;
+    constructor(stream: Writable, alignment: number) {
+        this.stream = stream;
         this.alignment = alignment;
     }
 
-    write(record: FCGIRecord) {
-        const header = encode(record, this.alignment);
-        this.writable.write(header);
+    write(record: FCGIRecord, stream?: Readable, length?: number) {
+        if (stream) {
+            const size = length ?? 0;
 
-        const readable = getStream(record);
-        if (readable) {
-            const { stream, length: size } = readable;
             let readSize = 0;
 
             const processChunk = (chunk: Buffer) => {
@@ -40,8 +31,11 @@ class WriterImpl implements Writer {
                     );
                     return;
                 }
+
+                setBody(record, chunk);
+                this.stream.write(encode(record, this.alignment));
+
                 readSize += chunk.byteLength;
-                this.writable.write(chunk);
             };
 
             stream.on('data', (chunk: any) => {
@@ -66,19 +60,17 @@ class WriterImpl implements Writer {
                         new Error('WriterImpl::write: Not enough data is sent')
                     );
                 }
-
-                const padding = paddingSize(record, this.alignment);
-                if (padding > 0) {
-                    this.writable.write(Buffer.allocUnsafe(padding));
-                }
             });
+        } else {
+            const header = encode(record, this.alignment);
+            this.stream.write(header);
         }
     }
 }
 
 export function createWriter(
-    writable: Writable,
+    stream: Writable,
     alignment: number = defaultAlignment
 ): Writer {
-    return new WriterImpl(writable, alignment);
+    return new WriterImpl(stream, alignment);
 }

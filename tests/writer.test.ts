@@ -16,10 +16,16 @@ class TestWritable extends Writable {
     }
 }
 
-describe('Writer', () => {
+const prepare = () => {
+    const writable = new TestWritable();
+    const writer = createWriter(writable);
+    return { writable, writer };
+};
+
+describe('Writer and simple record', () => {
     test('write simple record', () => {
-        const writable = new TestWritable();
-        const writer = createWriter(writable);
+        const { writable, writer } = prepare();
+
         writer.write(
             makeRecord(Type.FCGI_UNKNOWN_TYPE, 0, B`0000 0000 0000 0000`)
         );
@@ -29,8 +35,8 @@ describe('Writer', () => {
     });
 
     test('write record with padding', () => {
-        const writable = new TestWritable();
-        const writer = createWriter(writable);
+        const { writable, writer } = prepare();
+
         writer.write(makeRecord(Type.FCGI_UNKNOWN_TYPE, 0, B`0000 0000`));
         expect(writable.data.length).toBe(16);
         expect(writable.data.subarray(0, 12)).toEqual(
@@ -38,14 +44,32 @@ describe('Writer', () => {
         );
     });
 
+    test('write two records', () => {
+        const { writable, writer } = prepare();
+        const record = makeRecord(
+            Type.FCGI_UNKNOWN_TYPE,
+            0,
+            B`0000 0000 0000 0000`
+        );
+
+        writer.write(record);
+        writer.write(record);
+
+        expect(writable.data).toEqual(
+            B`
+            01 0b 0000 0008 00 00 0000 0000 0000 0000
+            01 0b 0000 0008 00 00 0000 0000 0000 0000
+            `
+        );
+    });
+});
+
+describe('Writer and streamed record', () => {
     test('write record with stream', async () => {
-        const writable = new TestWritable();
+        const { writable, writer } = prepare();
         const stream = Readable.from([B`0000 0000 0000 0001`]);
 
-        const writer = createWriter(writable);
-        writer.write(
-            makeRecord(Type.FCGI_UNKNOWN_TYPE, 0, { length: 8, stream })
-        );
+        writer.write(makeRecord(Type.FCGI_UNKNOWN_TYPE, 0), stream, 8);
 
         await tick();
 
@@ -55,19 +79,36 @@ describe('Writer', () => {
     });
 
     test('write record with stream and padding', async () => {
-        const writable = new TestWritable();
+        const { writable, writer } = prepare();
         const stream = Readable.from([B`01 02 03 04 05`]);
 
-        const writer = createWriter(writable);
-        writer.write(
-            makeRecord(Type.FCGI_UNKNOWN_TYPE, 1, { length: 5, stream })
-        );
+        writer.write(makeRecord(Type.FCGI_UNKNOWN_TYPE, 1), stream, 5);
 
         await tick();
 
         expect(writable.data.length).toBe(16);
         expect(writable.data.subarray(0, 13)).toEqual(
             B`01 0b 0001 0005 03 00 0102 0304 05`
+        );
+    });
+
+    test('can write another record while writing streamed record', async () => {
+        const { writable, writer } = prepare();
+        const stream = Readable.from([B`0000 0000 0000 0123`]);
+
+        writer.write(makeRecord(Type.FCGI_UNKNOWN_TYPE, 0), stream, 8);
+        writer.write(
+            makeRecord(Type.FCGI_UNKNOWN_TYPE, 1, B`0123 4567 89AB CDEF`)
+        );
+
+        await tick();
+
+        // The order of bytes is not guaranteed.
+        // In this case, because stream one is async,
+        // the second write wins so that it comes first.
+        expect(writable.data).toEqual(
+            B`01 0b 0001 0008 00 00 0123 4567 89AB CDEF
+              01 0b 0000 0008 00 00 0000 0000 0000 0123`
         );
     });
 });
