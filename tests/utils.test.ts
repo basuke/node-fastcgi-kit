@@ -82,4 +82,10 @@ describe('bytestr', () => {
             Buffer.from([0, 0x48, 0x65, 0x6c, 0x6c, 0x6f, 0])
         );
     });
+
+    test('spaces between expression', () => {
+        expect(B`00 ${[5]} ${'Hello'}`).toEqual(
+            Buffer.from([0, 5, 0x48, 0x65, 0x6c, 0x6c, 0x6f])
+        );
+    });
 });

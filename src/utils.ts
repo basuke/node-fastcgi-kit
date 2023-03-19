@@ -22,12 +22,14 @@ export function bytestr(
     for (let str of strs) {
         while (str.length > 0) {
             str = str.trim();
-            const twoDigits = str.substring(0, 2);
-            if (!twoDigits.match(/[0-9A-Fa-f]{2}/)) {
-                throw new SyntaxError('invalid hex digits');
+            if (str) {
+                const twoDigits = str.substring(0, 2);
+                if (!twoDigits.match(/[0-9A-Fa-f]{2}/)) {
+                    throw new SyntaxError('invalid hex digits');
+                }
+                str = str.substring(2);
+                bytes.push(parseInt(twoDigits, 16));
             }
-            str = str.substring(2);
-            bytes.push(parseInt(twoDigits, 16));
         }
 
         if (exprs.length > 0) {
