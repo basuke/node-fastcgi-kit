@@ -1,3 +1,4 @@
+import { Pairs } from './keyvalues';
 import { alignedSize, hiByte, loByte, word } from './utils';
 
 export enum Type {
@@ -16,12 +17,15 @@ export enum Type {
 
 export const defaultAlignment = 8;
 export const maxContentLength = 0xffff;
+export const maxAlignment = 256;
 export const headerSize = 8;
+
+type EncodableBody = Buffer | null;
 
 export interface FCGIRecord {
     type: Type;
     requestId: number;
-    body: Buffer | null;
+    body: EncodableBody | Pairs;
 }
 
 export interface Header {
@@ -35,7 +39,7 @@ export interface Header {
 export function makeRecord(
     type: Type,
     requestId: number = 0,
-    body: Buffer | null = null
+    body: EncodableBody | Pairs = null
 ): FCGIRecord {
     return {
         type,
@@ -46,7 +50,7 @@ export function makeRecord(
 
 export function setBody(
     record: FCGIRecord,
-    body: string | Buffer | null
+    body: string | EncodableBody
 ): void {
     if (typeof body === 'string') {
         record.body = Buffer.from(body);
@@ -58,6 +62,10 @@ export function setBody(
 export function contentSize(record: FCGIRecord): number {
     if (record.body instanceof Buffer) {
         return record.body.byteLength;
+    } else if (record.body && typeof record.body === 'object') {
+        throw new TypeError(
+            'contentSize(): cannot encode key value pairs directly'
+        );
     }
     return 0;
 }
@@ -72,8 +80,8 @@ export function encode(
     alignment: number = defaultAlignment,
     headerOnly: boolean = false
 ): Buffer {
-    if (alignment > 256) {
-        throw new RangeError('alignment must be <= 256');
+    if (alignment > maxAlignment) {
+        throw new RangeError(`alignment must be <= ${maxAlignment}`);
     }
 
     const length = contentSize(record);

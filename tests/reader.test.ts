@@ -50,6 +50,22 @@ describe('Reader', () => {
         ).toEqual([unknownRecord]);
     });
 
+    test('record with key-value pairs', async () => {
+        const record = B`01 04 0001 000c 00 00 05 05 ${'helloworld'}`;
+        const eor = B`01 04 0001 0000 00 00`;
+
+        // without EOR, it won't return record
+        expect(await readChunks([record])).toEqual([]);
+
+        expect(await readChunks([eor])).toEqual([
+            makeRecord(Type.FCGI_PARAMS, 1, {}),
+        ]);
+
+        expect(await readChunks([record, eor])).toEqual([
+            makeRecord(Type.FCGI_PARAMS, 1, { hello: 'world' }),
+        ]);
+    });
+
     test('separated chunk', async () => {
         expect(await readChunks([B`01 02 0000 0000`, B`00 00`])).toEqual([
             abortRecord,
