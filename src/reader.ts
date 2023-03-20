@@ -1,12 +1,17 @@
 import { decodableSize, decode, FCGIRecord, Type } from './record';
 import { Writable } from 'node:stream';
-import { decode as decodePairs, Pairs } from './keyvalues';
+import {
+    decode as decodePairs,
+    Pairs,
+    StreamDecoder as ParamsDecoder,
+    StreamDecoder,
+} from './keyvalues';
 
 export class Reader extends Writable {
     remaining: Buffer | null = null;
 
     // Param stream
-    params: [Buffer | null, Pairs] | null = null;
+    paramsDecoders: Map<number, ParamsDecoder> = new Map();
 
     _write(
         chunk: Buffer,
@@ -38,7 +43,7 @@ export class Reader extends Writable {
         if (record.type === Type.FCGI_PARAMS) {
             return this.decodeParams(record);
         } else {
-            if (this.params) {
+            if (this.paramsDecoders.has(record.requestId)) {
                 this.emit(
                     'error',
                     new Error(
@@ -51,22 +56,31 @@ export class Reader extends Writable {
         }
     }
 
+    paramsDecoderForRecord(record: FCGIRecord): ParamsDecoder {
+        if (this.paramsDecoders.has(record.requestId)) {
+            return this.paramsDecoders.get(record.requestId) as StreamDecoder;
+        } else {
+            const decoder = new ParamsDecoder();
+            this.paramsDecoders.set(record.requestId, decoder);
+            return decoder;
+        }
+    }
+
     decodeParams(record: FCGIRecord): FCGIRecord | null {
-        const [leftover, pairs] = this.params ?? [null, {}];
-        this.params = null;
+        const decoder = this.paramsDecoderForRecord(record);
 
         if (record.body instanceof Buffer) {
-            const buffer = leftover
-                ? Buffer.concat([leftover, record.body])
-                : record.body;
-            const remaining = decodePairs(buffer, pairs);
-            if (Object.keys(pairs).length > 0 || remaining) {
-                this.params = [remaining, pairs];
-                return null;
-            }
+            decoder.decode(record.body);
+            return null;
+        } else if (decoder.canClose) {
+            record.body = decoder.pairs;
+            this.paramsDecoders.delete(record.requestId);
+            return record;
+        } else {
+            const message =
+                'decodeParams: Incomplete pairs. Cannot close stream';
+            this.emit('error', new Error(message));
+            return null;
         }
-
-        record.body = pairs;
-        return record;
     }
 }

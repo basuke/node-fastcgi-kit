@@ -83,3 +83,19 @@ export function decode(buffer: Buffer, pairs: Pairs): Buffer | null {
     }
     return null;
 }
+
+export class StreamDecoder {
+    pairs: Pairs = {};
+    remaining: Buffer | null = null;
+
+    decode(buffer: Buffer) {
+        buffer = this.remaining
+            ? Buffer.concat([this.remaining, buffer])
+            : buffer;
+        this.remaining = decode(buffer, this.pairs);
+    }
+
+    get canClose(): boolean {
+        return this.remaining === null;
+    }
+}
