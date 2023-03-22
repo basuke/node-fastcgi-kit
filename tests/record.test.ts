@@ -21,8 +21,7 @@ describe('encoding record', () => {
     test('request with body', () => {
         const record = makeRecord(Type.FCGI_UNKNOWN_TYPE);
         record.requestId = 258;
-        setBody(record, b(0, 1, 2));
-        expect(encode(record)).toEqual(
+        expect(encode(setBody(record, b(0, 1, 2)))).toEqual(
             B`01 0B 0102 0003 05 00 00010200 00000000`
         );
     });
@@ -30,8 +29,7 @@ describe('encoding record', () => {
     test('request with string body', () => {
         const record = makeRecord(Type.FCGI_UNKNOWN_TYPE);
         record.requestId = 259;
-        setBody(record, 'Hello');
-        expect(encode(record)).toEqual(
+        expect(encode(setBody(record, 'Hello'))).toEqual(
             B`01 0b 0103 0005 03 00 ${'Hello'} 000000`
         );
     });

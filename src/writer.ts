@@ -33,10 +33,10 @@ class WriterImpl implements Writer {
                 let offset = 0;
                 while (offset < chunk.byteLength) {
                     const body = chunk.subarray(offset, offset + limit);
-                    setBody(record, body);
+                    const record2 = setBody(record, body);
 
-                    this.stream.write(encode(record, this.alignment, true));
-                    this.stream.write(record.body);
+                    this.stream.write(encode(record2, this.alignment, true));
+                    this.stream.write(record2.body);
 
                     const padding = paddingSize(
                         body.byteLength,
