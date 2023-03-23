@@ -40,19 +40,27 @@ export class Reader extends Writable {
 
     decodeRecord(chunk: Buffer): FCGIRecord | null {
         const record = decode(chunk);
-        if (record.type === Type.FCGI_PARAMS) {
-            return this.decodeParams(record);
-        } else {
-            if (this.paramsDecoders.has(record.requestId)) {
-                this.emit(
-                    'error',
-                    new Error(
-                        'Reader::decodeRecord: Cannot receive other record while processing FCGI_PARAMS stream.'
-                    )
-                );
-                return null;
-            }
-            return record;
+        if (
+            this.paramsDecoders.has(record.requestId) &&
+            record.type !== Type.FCGI_PARAMS
+        ) {
+            this.emit(
+                'error',
+                new Error(
+                    'Reader::decodeRecord: Cannot receive other record while processing FCGI_PARAMS stream.'
+                )
+            );
+            return null;
+        }
+
+        switch (record.type) {
+            case Type.FCGI_GET_VALUES:
+            case Type.FCGI_GET_VALUES_RESULT:
+            case Type.FCGI_PARAMS:
+                return this.decodeParams(record);
+
+            default:
+                return record;
         }
     }
 
@@ -60,7 +68,7 @@ export class Reader extends Writable {
         if (this.paramsDecoders.has(record.requestId)) {
             return this.paramsDecoders.get(record.requestId) as StreamDecoder;
         } else {
-            const decoder = new ParamsDecoder();
+            const decoder = new ParamsDecoder(record.type === Type.FCGI_PARAMS);
             this.paramsDecoders.set(record.requestId, decoder);
             return decoder;
         }
@@ -71,14 +79,15 @@ export class Reader extends Writable {
 
         if (record.body instanceof Buffer) {
             decoder.decode(record.body);
-            return null;
-        } else if (decoder.canClose) {
+            if (decoder.isStream) return null;
+        }
+
+        if (decoder.canClose) {
             record.body = decoder.pairs;
             this.paramsDecoders.delete(record.requestId);
             return record;
         } else {
-            const message =
-                'decodeParams: Incomplete pairs. Cannot close stream';
+            const message = 'decodeParams: Incomplete pairs.';
             this.emit('error', new Error(message));
             return null;
         }

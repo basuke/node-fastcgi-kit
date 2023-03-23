@@ -1,4 +1,12 @@
-import { alignedSize, bytestr as B, hiByte, loByte, word } from '../src/utils';
+import {
+    alignedSize,
+    bytestr as B,
+    hiByte,
+    loByte,
+    StreamPair,
+    word,
+    tick,
+} from '../src/utils';
 
 describe('alignedSize', () => {
     test('works with same size', () => {
@@ -87,5 +95,24 @@ describe('bytestr', () => {
         expect(B`00 ${[5]} ${'Hello'}`).toEqual(
             Buffer.from([0, 5, 0x48, 0x65, 0x6c, 0x6c, 0x6f])
         );
+    });
+});
+
+describe('stream pair', () => {
+    test('creation', async () => {
+        const [a, b] = StreamPair.create();
+        const receivedA: any[] = [];
+        const receivedB: any[] = [];
+
+        a.on('data', (chunk) => receivedA.push(chunk));
+        b.on('data', (chunk) => receivedB.push(chunk));
+
+        a.write(B`010203`);
+        b.write(B`ABCDEF`);
+
+        await tick();
+
+        expect(receivedB).toEqual([B`010203`]);
+        expect(receivedA).toEqual([B`ABCDEF`]);
     });
 });

@@ -87,6 +87,11 @@ export function decode(buffer: Buffer, pairs: Pairs): Buffer | null {
 export class StreamDecoder {
     pairs: Pairs = {};
     remaining: Buffer | null = null;
+    readonly isStream: boolean;
+
+    constructor(isStream: boolean) {
+        this.isStream = isStream;
+    }
 
     decode(buffer: Buffer) {
         buffer = this.remaining

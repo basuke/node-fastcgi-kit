@@ -1,3 +1,6 @@
+import { Duplex, PassThrough } from 'node:stream';
+import { EventEmitter } from 'node:events';
+
 export function alignedSize(size: number, alignment: number): number {
     return Math.floor((size + alignment - 1) / alignment) * alignment;
 }
@@ -51,5 +54,69 @@ export function bytestr(
 export function tick() {
     return new Promise((resolve) => {
         setTimeout(resolve, 17);
+    });
+}
+
+export class StreamPair extends Duplex {
+    static create() {
+        const a = new StreamPair();
+        const b = new StreamPair();
+
+        a.other = b;
+        b.other = a;
+
+        return [a, b];
+    }
+
+    buffer: PassThrough = new PassThrough();
+    other: StreamPair | null = null;
+
+    constructor() {
+        super();
+
+        this.once('finish', () => {
+            if (this.other) {
+                this.other.buffer.end();
+            }
+        });
+
+        this.buffer.once('end', () => this.push(null));
+    }
+
+    _read() {
+        const chunk = this.buffer.read();
+        if (chunk) return this.push(chunk);
+
+        this.buffer.once('readable', () => this._read());
+    }
+
+    _write(data: any, enc: BufferEncoding, cb: any) {
+        if (this.other) {
+            this.other.buffer.write(data, enc, cb);
+        }
+    }
+}
+
+export function once<T>(
+    target: EventEmitter,
+    event: string,
+    timeout: number | undefined
+): Promise<T> {
+    return new Promise((resolve, reject) => {
+        const listener = (values: T) => {
+            resolve(values);
+            clearTimeout(ticket);
+        };
+
+        target.once(event, listener);
+
+        const ticket = setTimeout(() => {
+            target.removeListener(event, listener);
+            reject(
+                new Error(
+                    `Timeout: cannot receive value record in ${timeout} ms`
+                )
+            );
+        }, timeout);
     });
 }
