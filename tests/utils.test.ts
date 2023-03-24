@@ -6,6 +6,7 @@ import {
     StreamPair,
     word,
     tick,
+    MinBag,
 } from '../src/utils';
 
 describe('alignedSize', () => {
@@ -114,5 +115,18 @@ describe('stream pair', () => {
 
         expect(receivedB).toEqual([B`010203`]);
         expect(receivedA).toEqual([B`ABCDEF`]);
+    });
+});
+
+describe('MinBag', () => {
+    test('basic', () => {
+        const bag = new MinBag(true);
+
+        expect(bag.issue()).toBe(1);
+        expect(bag.issue()).toBe(2);
+        bag.putBack(2);
+        expect(bag.issue()).toBe(2);
+        bag.putBack(1);
+        expect(bag.issue()).toBe(1);
     });
 });

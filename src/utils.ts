@@ -120,3 +120,47 @@ export function once<T>(
         }, timeout);
     });
 }
+
+export class MinBag {
+    maxIssued: number = 0;
+    available: number[] = [];
+    readonly needCheck: boolean;
+
+    constructor(needCheck: boolean = false) {
+        this.needCheck = needCheck;
+    }
+
+    issue(): number {
+        if (this.available.length > 0) {
+            return this.available.shift() as number;
+        }
+
+        const id = ++this.maxIssued;
+        if (this.needCheck) this.check();
+        return id;
+    }
+
+    putBack(id: number) {
+        if (id <= 0 || id > this.maxIssued) {
+            throw new Error('Invalid id was returned');
+        }
+
+        if (id === this.maxIssued) {
+            this.maxIssued--;
+        } else {
+            this.available.push(id);
+        }
+
+        if (this.needCheck) this.check();
+    }
+
+    check(): void {
+        for (const id of this.available) {
+            if (id >= this.maxIssued) {
+                throw new Error(
+                    `invalid id is in 'available': ${id} > maxIssued(${this.maxIssued})`
+                );
+            }
+        }
+    }
+}
