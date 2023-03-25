@@ -5,6 +5,7 @@ import {
     setBody,
     paddingSize,
     maxContentLength,
+    Type,
 } from './record';
 import { Readable, Writable } from 'node:stream';
 
@@ -76,6 +77,9 @@ class WriterImpl implements Writer {
                     );
                 }
             });
+        } else if (record.type === Type.FCGI_PARAMS) {
+            this.stream.write(encode(record, this.alignment));
+            this.stream.write(encode(setBody(record, null), this.alignment));
         } else {
             const header = encode(record, this.alignment);
             this.stream.write(header);

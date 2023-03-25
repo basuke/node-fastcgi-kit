@@ -131,13 +131,25 @@ describe('Client', () => {
     });
 
     test('can send params over request', async () => {
+        const headers = {
+            Hello: 'world',
+            Foo: 'bar',
+        };
+
         async function doIt() {
             const { sentRecords, request } = await requestForTest();
 
-            request.sendParams({
-                Hello: 'world',
-                Foo: 'bar',
-            });
+            request.sendParams(headers);
+            await tick();
+
+            return { records: sentRecords.slice(1) };
         }
+
+        const { records } = await doIt();
+        expect(records.length).toBe(1);
+        expect(records[0].body).toEqual(headers);
+        expect(records[0].body).not.toBe(headers);
     });
+
+    test('can send LARGE params over request', async () => {});
 });
