@@ -1,6 +1,6 @@
 import { Duplex } from 'node:stream';
 import { Reader } from './reader';
-import { FCGIRecord, makeRecord, Type } from './record';
+import { BeginRequestBody, FCGIRecord, makeRecord, Role, Type } from './record';
 import { createWriter, Writer } from './writer';
 import { EventEmitter } from 'node:events';
 import { Pairs } from './keyvalues';
@@ -10,12 +10,6 @@ export interface ServerValues {
     maxConns: number;
     maxReqs: number;
     mpxsConns: boolean;
-}
-
-export enum Role {
-    Responder = 1,
-    Authorizer = 2,
-    Filter = 3,
 }
 
 export interface Client extends EventEmitter {
@@ -66,10 +60,8 @@ class ClientImpl extends EventEmitter implements Client {
         this.writer = createWriter(this.stream);
 
         if (skipServerValues) {
-            console.log('skiped. now ready');
             setImmediate(() => this.emit('ready'));
         } else {
-            console.log('not skiped!!!');
             this.getServerValues()
                 .then((values: ServerValues) => {
                     this.maxConns = values.maxConns;
@@ -171,21 +163,30 @@ class RequestImpl implements Request {
         this.id = client.issueRequestId();
     }
 
-    send(record: FCGIRecord): void {
+    send(
+        type: Type,
+        body: Buffer | Pairs | BeginRequestBody | null = null
+    ): void {
+        const record = this.makeRecord(type, body);
         console.log('Request:send', record);
         this.client.writer.write(record);
     }
 
-    makeRecord(type: Type, body: Buffer | Pairs | null = null): FCGIRecord {
+    makeRecord(
+        type: Type,
+        body: Buffer | Pairs | BeginRequestBody | null = null
+    ): FCGIRecord {
         return makeRecord(type, this.id, body);
     }
 
     sendBegin(role: Role, keepConn: boolean): void {
-        const body = null;
-        this.send(this.makeRecord(Type.FCGI_BEGIN_REQUEST, body));
+        this.send(
+            Type.FCGI_BEGIN_REQUEST,
+            new BeginRequestBody(role, keepConn)
+        );
     }
 
     sendParams(pairs: Pairs): void {
-        this.send(makeRecord(Type.FCGI_PARAMS, 0, pairs));
+        this.send(Type.FCGI_PARAMS, pairs);
     }
 }

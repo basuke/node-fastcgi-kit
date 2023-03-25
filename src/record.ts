@@ -21,7 +21,46 @@ export const maxContentLength = 0xffff;
 export const maxAlignment = 256;
 export const headerSize = 8;
 
-type EncodableBody = Buffer | null;
+export enum Role {
+    Responder = 1,
+    Authorizer = 2,
+    Filter = 3,
+}
+
+export class BeginRequestBody {
+    role: Role;
+    keepConnection: boolean;
+
+    static bufferSize: number = 8;
+
+    constructor(role: Role, keepConnection: boolean) {
+        this.role = role;
+        this.keepConnection = keepConnection;
+    }
+
+    get flags(): number {
+        let value = 0;
+        if (this.keepConnection) value |= 0x1;
+        return value;
+    }
+
+    encode(): Buffer {
+        const buffer = Buffer.allocUnsafe(BeginRequestBody.bufferSize);
+        buffer[0] = hiByte(this.role);
+        buffer[1] = loByte(this.role);
+        buffer[2] = this.flags;
+        return buffer;
+    }
+
+    static decode(buffer: Buffer): BeginRequestBody | null {
+        if (buffer.byteLength !== BeginRequestBody.bufferSize) return null;
+        const role = word(buffer[0], buffer[1]);
+        const keepConnection = !!(buffer[2] & 0x1);
+        return new BeginRequestBody(role, keepConnection);
+    }
+}
+
+type EncodableBody = Buffer | BeginRequestBody | null;
 type RecordBody = EncodableBody | Pairs;
 
 interface EncodableRecord {
@@ -60,6 +99,10 @@ export function makeRecord(
 
 function encodeBody(body: RecordBody): EncodableBody {
     if (!body || body instanceof Buffer) return body;
+
+    if (body instanceof BeginRequestBody) {
+        return body.encode();
+    }
 
     if (typeof body === 'object') {
         return encodePairs(body);
@@ -175,6 +218,24 @@ export function decodableSize(buffer: Buffer): number | undefined {
     return buffer.byteLength >= expectedSize ? expectedSize : undefined;
 }
 
+function decodeBody(type: Type, buffer: Buffer): RecordBody {
+    switch (type) {
+        case Type.FCGI_BEGIN_REQUEST:
+            return BeginRequestBody.decode(buffer);
+        case Type.FCGI_PARAMS:
+        case Type.FCGI_GET_VALUES:
+        case Type.FCGI_GET_VALUES_RESULT:
+        case Type.FCGI_ABORT_REQUEST:
+        case Type.FCGI_END_REQUEST:
+        case Type.FCGI_UNKNOWN_TYPE:
+        case Type.FCGI_STDIN:
+        case Type.FCGI_STDOUT:
+        case Type.FCGI_STDERR:
+        case Type.FCGI_DATA:
+            return buffer;
+    }
+}
+
 export function decode(buffer: Buffer): FCGIRecord {
     const header = decodeHeader(buffer);
     if (!header) {
@@ -185,59 +246,17 @@ export function decode(buffer: Buffer): FCGIRecord {
         throw new RangeError('buffer too short');
     }
 
-    const record = makeRecord(header.type);
-    record.requestId = header.requestId;
     if (header.contentLength > 0) {
-        return setBody(
-            record,
-            buffer.subarray(headerSize, headerSize + header.contentLength)
+        const body = buffer.subarray(
+            headerSize,
+            headerSize + header.contentLength
+        );
+        return makeRecord(
+            header.type,
+            header.requestId,
+            decodeBody(header.type, body)
         );
     } else {
-        return record;
+        return makeRecord(header.type, header.requestId);
     }
 }
-
-// 4. Management Records
-
-export class GetValuesRecord {
-    type: number = Type.FCGI_GET_VALUES;
-    requestId: number = 0;
-    body: Pairs;
-
-    constructor(pairs: Pairs) {
-        this.body = pairs;
-    }
-}
-
-export class GetValuesResultRecord {
-    type: number = Type.FCGI_GET_VALUES_RESULT;
-    requestId: number = 0;
-    body: Pairs;
-
-    constructor(pairs: Pairs) {
-        this.body = pairs;
-    }
-}
-
-export class UnknownTypeRecord {
-    type: number = Type.FCGI_UNKNOWN_TYPE;
-    requestId: number = 0;
-    body = null;
-    unknownType: number;
-
-    constructor(type: number) {
-        this.unknownType = type;
-    }
-}
-
-// 5. Application Records
-
-// export class BeginRequestRecord {
-//     type: number = Type.FCGI_BEGIN_REQUEST;
-//     requestId: number;
-//     body = null;
-//     role: number;
-//     flags: number;
-// }
-
-// encode(new UnknownTypeRecord(5));

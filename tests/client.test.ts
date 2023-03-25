@@ -1,6 +1,12 @@
 import { createClientWithStream, Request } from '../src/client';
 import { Reader } from '../src/reader';
-import { FCGIRecord, makeRecord, Type } from '../src/record';
+import {
+    BeginRequestBody,
+    FCGIRecord,
+    makeRecord,
+    Role,
+    Type,
+} from '../src/record';
 import { bytestr as B, once, StreamPair, tick } from '../src/utils';
 import { createWriter } from '../src/writer';
 
@@ -48,6 +54,7 @@ async function requestForTest({ count = 1 } = {}) {
             requests.push(client.begin());
         }
     } catch (e) {
+        console.error(e);
         error = e;
     }
     return { ...result, requests, request: requests[0], error };
@@ -116,6 +123,11 @@ describe('Client', () => {
 
         expect(record.type).toBe(Type.FCGI_BEGIN_REQUEST);
         expect(record.requestId).toBe(request.id);
+        expect(record.body).toBeInstanceOf(BeginRequestBody);
+
+        const body = record.body as BeginRequestBody;
+        expect(body.role).toBe(Role.Responder);
+        expect(body.keepConnection).toBeFalsy();
     });
 
     test('can send params over request', async () => {
