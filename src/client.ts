@@ -37,7 +37,6 @@ export function createClientWithStream(
     skipServerValues: boolean = true
 ): Client {
     const client = new ClientImpl(stream, true);
-    console.log(client);
     return client;
 }
 
@@ -173,6 +172,7 @@ class RequestImpl implements Request {
     }
 
     send(record: FCGIRecord): void {
+        console.log('Request:send', record);
         this.client.writer.write(record);
     }
 

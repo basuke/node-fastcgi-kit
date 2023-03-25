@@ -1,7 +1,7 @@
 import { createClientWithStream, Request } from '../src/client';
 import { Reader } from '../src/reader';
 import { FCGIRecord, makeRecord, Type } from '../src/record';
-import { bytestr as B, StreamPair, tick } from '../src/utils';
+import { bytestr as B, once, StreamPair, tick } from '../src/utils';
 import { createWriter } from '../src/writer';
 
 function clientForTest({ skipServerValues = true } = {}) {
@@ -33,6 +33,24 @@ function clientForTest({ skipServerValues = true } = {}) {
         sentChunks, // chunks arrived to their end
         sentRecords, // records arrived to their end
     };
+}
+
+async function requestForTest({ count = 1 } = {}) {
+    const result = clientForTest();
+    const { client } = result;
+
+    let requests: Request[] = [];
+    let error: any = undefined;
+
+    try {
+        await once(client, 'ready', 5000);
+        for (let i = 0; i < count; i++) {
+            requests.push(client.begin());
+        }
+    } catch (e) {
+        error = e;
+    }
+    return { ...result, requests, request: requests[0], error };
 }
 
 function serverValuesResult({
@@ -67,14 +85,8 @@ describe('Client', () => {
 
     test('request must have id', async () => {
         async function diIt() {
-            const { client } = clientForTest();
-
-            let request: unknown;
-            client.once('ready', () => {
-                request = client.begin();
-            });
-            await tick();
-            return request as Request;
+            const { request } = await requestForTest();
+            return request;
         }
 
         const request = await diIt();
@@ -84,19 +96,36 @@ describe('Client', () => {
 
     test('request id must be unique', async () => {
         async function diIt() {
-            const { client } = clientForTest();
-
-            let requests: unknown[] = [];
-            client.once('ready', () => {
-                requests.push(client.begin());
-                requests.push(client.begin());
-            });
-            await tick();
-            return requests.map((r) => r as Request);
+            const { requests } = await requestForTest({ count: 2 });
+            return requests;
         }
 
         const [request1, request2] = await diIt();
         expect(request1.id).not.toBe(0);
         expect(request1.id).not.toBe(request2.id);
+    });
+
+    test('beginRequest record must be sent', async () => {
+        async function doIt() {
+            const { request, sentRecords } = await requestForTest();
+            await tick();
+            return { request, record: sentRecords[0] };
+        }
+
+        const { request, record } = await doIt();
+
+        expect(record.type).toBe(Type.FCGI_BEGIN_REQUEST);
+        expect(record.requestId).toBe(request.id);
+    });
+
+    test('can send params over request', async () => {
+        async function doIt() {
+            const { sentRecords, request } = await requestForTest();
+
+            request.sendParams({
+                Hello: 'world',
+                Foo: 'bar',
+            });
+        }
     });
 });
