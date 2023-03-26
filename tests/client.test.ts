@@ -4,11 +4,12 @@ import {
     BeginRequestBody,
     FCGIRecord,
     makeRecord,
+    RecordBody,
     Role,
     Type,
 } from '../src/record';
 import { bytestr as B, once, StreamPair, tick } from '../src/utils';
-import { createWriter, Writer } from '../src/writer';
+import { createWriter } from '../src/writer';
 import { Readable } from 'node:stream';
 
 function clientForTest({
@@ -35,6 +36,11 @@ function clientForTest({
     const writer = createWriter(other);
 
     const client = createClientWithStream(stream, skipServerValues);
+
+    function sendToClient(type: Type, id: number, body: RecordBody) {
+        writer.write(makeRecord(type, id, body));
+    }
+
     return {
         client, // client
         stream, // our endpoint
@@ -43,6 +49,7 @@ function clientForTest({
         writer, // their write endpoint using Record
         sentChunks, // chunks arrived to their end
         sentRecords, // records arrived to their end
+        sendToClient,
     };
 }
 
@@ -52,7 +59,7 @@ async function requestForTest({
     onRecord = (record: FCGIRecord) => {},
 } = {}) {
     const result = clientForTest({ skipServerValues, onRecord });
-    const { client } = result;
+    const { client, sendToClient } = result;
 
     let requests: Request[] = [];
     let error: any = undefined;
@@ -66,7 +73,13 @@ async function requestForTest({
         console.error(e);
         error = e;
     }
-    return { ...result, requests, request: requests[0], error };
+
+    const request = requests[0];
+    function sendToRequest(type: Type, body: RecordBody) {
+        sendToClient(type, request.id, body);
+    }
+
+    return { ...result, requests, request, error, sendToRequest };
 }
 
 function serverValuesResult({
@@ -213,22 +226,16 @@ describe('Client', () => {
     test('must receive stdout after sending params', async () => {
         const content = B`${'Hello back!'}`;
         async function doIt() {
-            const { request, writer } = await requestForTest({
+            const { request, sendToRequest } = await requestForTest({
                 onRecord: (record) => {
-                    if (record.type === Type.FCGI_PARAMS) {
-                        writer.write(
-                            makeRecord(
-                                Type.FCGI_STDOUT,
-                                record.requestId,
-                                content
-                            )
-                        );
-                    }
+                    if (record.type !== Type.FCGI_PARAMS) return;
+
+                    sendToRequest(Type.FCGI_STDOUT, content);
                 },
             });
 
             const received: Buffer[] = [];
-            request.on('data', (chunk: Buffer) => {
+            request.on('stdout', (chunk: Buffer) => {
                 received.push(chunk);
             });
 
@@ -250,10 +257,41 @@ describe('Client', () => {
     test('might receive stderr', async () => {});
     test('error when getting stdout before sending params', async () => {});
 
-    test('after receiving EndRequest, request must be closed', async () => {});
+    test('after receiving EndRequest, request must be closed and the id is available', async () => {
+        const content = B`${'Hello'}`;
+        async function doIt() {
+            const { client, request, sendToRequest } = await requestForTest({
+                onRecord: (record) => {
+                    if (record.type !== Type.FCGI_PARAMS) return;
+
+                    sendToRequest(Type.FCGI_STDOUT, content);
+                    sendToRequest(Type.FCGI_STDOUT, null);
+                    sendToRequest(Type.FCGI_END_REQUEST, B`00000000 00 000000`);
+                },
+            });
+
+            let closed = false;
+            request.on('end', () => {
+                closed = true;
+            });
+            request.params({ foo: 'bar' }).done();
+
+            await tick();
+            return { client, request, closed };
+        }
+
+        const { client, request, closed } = await doIt();
+        expect(closed).toBeTruthy();
+
+        expect(request.closed).toBeTruthy();
+        expect(client.getRequest(request.id)).toBeUndefined();
+    });
+
     test('when request is finished, the id is available to use', async () => {});
-    test('error when getting stdout before sending params', async () => {});
-    test('error ending before closing stdin', async () => {});
+
+    test('error ending request before closing stdin', async () => {});
+    test('error ending request before closing stdout', async () => {});
+    test('error ending request before closing stderr', async () => {});
 
     test('aborting request', async () => {});
 });

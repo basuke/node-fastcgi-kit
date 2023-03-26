@@ -1,6 +1,13 @@
 import { Duplex, Readable } from 'node:stream';
 import { Reader } from './reader';
-import { BeginRequestBody, FCGIRecord, makeRecord, Role, Type } from './record';
+import {
+    BeginRequestBody,
+    EndRequestBody,
+    FCGIRecord,
+    makeRecord,
+    Role,
+    Type,
+} from './record';
 import { createWriter, Writer } from './writer';
 import { EventEmitter } from 'node:events';
 import { Pairs } from './keyvalues';
@@ -19,23 +26,34 @@ export interface Client extends EventEmitter {
     begin(role: Role): Request;
     begin(keepConn: boolean): Request;
     begin(role: Role, keepConn: boolean): Request;
+
+    getRequest(id: number): Request | undefined;
+
+    on(event: 'ready', listener: () => void): this;
+    on(event: 'error', listener: (err: Error) => void): this;
 }
 
 export interface Request extends EventEmitter {
-    id: number;
-    params(pairs: Pairs): Request;
+    readonly id: number;
+    readonly closed: boolean;
 
-    send(body: string): Request;
-    send(body: Buffer): Request;
-    send(stream: Readable): Request;
-    done(): Request;
+    params(pairs: Pairs): this;
+
+    send(body: string): this;
+    send(body: Buffer): this;
+    send(stream: Readable): this;
+    done(): this;
+
+    on(event: 'stdout', listener: (buffer: Buffer) => void): this;
+    on(event: 'stderr', listener: (error: string) => void): this;
+    on(event: 'end', listener: () => void): this;
 }
 
 export function createClientWithStream(
     stream: Duplex,
     skipServerValues: boolean = true
 ): Client {
-    const client = new ClientImpl(stream, true);
+    const client = new ClientImpl(stream, skipServerValues);
     return client;
 }
 
@@ -135,6 +153,11 @@ class ClientImpl extends EventEmitter implements Client {
         return this.requests.get(id);
     }
 
+    endRequest(id: number): void {
+        this.requests.delete(id);
+        this.idBag.putBack(id);
+    }
+
     handleRecord(record: FCGIRecord): void {
         if (record.requestId) {
             const request = this.getRequest(record.requestId);
@@ -185,6 +208,7 @@ class ClientImpl extends EventEmitter implements Client {
 class RequestImpl extends EventEmitter implements Request {
     client: ClientImpl;
     id: number;
+    closed: boolean = false;
 
     constructor(client: ClientImpl) {
         super();
@@ -196,7 +220,7 @@ class RequestImpl extends EventEmitter implements Request {
     write(
         type: Type,
         body: Buffer | Pairs | BeginRequestBody | null = null
-    ): Request {
+    ): this {
         const record = this.makeRecord(type, body);
         // console.log('Request:send', record);
         this.client.writer.write(record);
@@ -210,18 +234,18 @@ class RequestImpl extends EventEmitter implements Request {
         return makeRecord(type, this.id, body);
     }
 
-    sendBegin(role: Role, keepConn: boolean): Request {
+    sendBegin(role: Role, keepConn: boolean): this {
         return this.write(
             Type.FCGI_BEGIN_REQUEST,
             new BeginRequestBody(role, keepConn)
         );
     }
 
-    params(pairs: Pairs): Request {
+    params(pairs: Pairs): this {
         return this.write(Type.FCGI_PARAMS, pairs);
     }
 
-    send(arg: string | Buffer | Readable): Request {
+    send(arg: string | Buffer | Readable): this {
         if (typeof arg === 'string') {
             return this.sendBuffer(Buffer.from(arg));
         } else if (arg instanceof Buffer) {
@@ -242,18 +266,28 @@ class RequestImpl extends EventEmitter implements Request {
                             record.type === Type.FCGI_STDERR
                         );
                     } else {
-                        this.emitError('Invalid body for stdout|strerr');
+                        this.emitError(
+                            'Invalid body for FCGI_STDOUT|FCGI_STDERR'
+                        );
                     }
+                }
+                break;
+
+            case Type.FCGI_END_REQUEST:
+                if (record.body instanceof EndRequestBody) {
+                    this.handleEndRequest(record.body);
+                } else {
+                    this.emitError('Invalid body for FCGI_END_REQUEST');
                 }
                 break;
         }
     }
 
-    sendBuffer(buffer: Buffer): Request {
+    sendBuffer(buffer: Buffer): this {
         return this.write(Type.FCGI_STDIN, buffer);
     }
 
-    sendFromStream(stream: Readable): Request {
+    sendFromStream(stream: Readable): this {
         stream.on('data', (chunk: Buffer) => {
             if (typeof chunk === 'string') {
                 chunk = Buffer.from(chunk);
@@ -263,12 +297,18 @@ class RequestImpl extends EventEmitter implements Request {
         return this;
     }
 
-    done(): Request {
+    done(): this {
         return this.write(Type.FCGI_STDIN);
     }
 
     handleOutput(buffer: Buffer, stderr: boolean) {
-        this.emit(stderr ? 'error' : 'data', buffer);
+        this.emit(stderr ? 'stderr' : 'stdout', buffer);
+    }
+
+    handleEndRequest(body: EndRequestBody): void {
+        this.closed = true;
+        this.client.endRequest(this.id);
+        this.emit('end');
     }
 
     emitError(error: string | Error) {

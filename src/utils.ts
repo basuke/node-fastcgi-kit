@@ -6,7 +6,7 @@ export function alignedSize(size: number, alignment: number): number {
 }
 
 export function hiByte(val: number): number {
-    return val >> 8;
+    return loByte(val >> 8);
 }
 
 export function loByte(val: number): number {
@@ -15,6 +15,18 @@ export function loByte(val: number): number {
 
 export function word(hi: number, lo: number): number {
     return (hi << 8) + lo;
+}
+
+export function hiWord(val: number): number {
+    return loWord(val >> 16);
+}
+
+export function loWord(val: number): number {
+    return val & 0xffff;
+}
+
+export function dword(hi: number, lo: number): number {
+    return (hi << 16) + lo;
 }
 
 export function bytestr(

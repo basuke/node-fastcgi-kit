@@ -1,5 +1,13 @@
 import { Pairs } from './keyvalues';
-import { alignedSize, hiByte, loByte, word } from './utils';
+import {
+    alignedSize,
+    dword,
+    hiByte,
+    hiWord,
+    loByte,
+    loWord,
+    word,
+} from './utils';
 import { encode as encodePairs } from './keyvalues';
 
 export enum Type {
@@ -28,8 +36,8 @@ export enum Role {
 }
 
 export class BeginRequestBody {
-    role: Role;
-    keepConnection: boolean;
+    readonly role: Role;
+    readonly keepConnection: boolean;
 
     static bufferSize: number = 8;
 
@@ -60,8 +68,44 @@ export class BeginRequestBody {
     }
 }
 
-type EncodableBody = Buffer | BeginRequestBody | null;
-type RecordBody = EncodableBody | Pairs;
+export class EndRequestBody {
+    readonly appStatus: number;
+    readonly protocolStatus: number;
+
+    static bufferSize: number = 8;
+
+    constructor(appStatus: number, protocolStatus: number) {
+        this.appStatus = appStatus;
+        this.protocolStatus = protocolStatus;
+    }
+
+    encode(): Buffer {
+        const buffer = Buffer.allocUnsafe(BeginRequestBody.bufferSize);
+        const val1 = hiWord(this.appStatus);
+        const val2 = loWord(this.appStatus);
+        buffer[0] = hiByte(val1);
+        buffer[1] = loByte(val1);
+        buffer[2] = hiByte(val2);
+        buffer[3] = loByte(val2);
+        buffer[4] = loByte(this.protocolStatus);
+        return buffer;
+    }
+
+    static decode(buffer: Buffer): EndRequestBody | null {
+        if (buffer.byteLength !== EndRequestBody.bufferSize) return null;
+        const val1 = word(buffer[0], buffer[1]);
+        const val2 = word(buffer[0], buffer[1]);
+        const appStatus = dword(
+            word(buffer[0], buffer[1]),
+            word(buffer[2], buffer[3])
+        );
+        const protocolStatus = buffer[4];
+        return new EndRequestBody(appStatus, protocolStatus);
+    }
+}
+
+type EncodableBody = Buffer | BeginRequestBody | EndRequestBody | null;
+export type RecordBody = EncodableBody | Pairs;
 
 interface EncodableRecord {
     type: Type;
@@ -101,6 +145,10 @@ function encodeBody(body: RecordBody): EncodableBody {
     if (!body || body instanceof Buffer) return body;
 
     if (body instanceof BeginRequestBody) {
+        return body.encode();
+    }
+
+    if (body instanceof EndRequestBody) {
         return body.encode();
     }
 
@@ -222,11 +270,12 @@ function decodeBody(type: Type, buffer: Buffer): RecordBody {
     switch (type) {
         case Type.FCGI_BEGIN_REQUEST:
             return BeginRequestBody.decode(buffer);
+        case Type.FCGI_END_REQUEST:
+            return EndRequestBody.decode(buffer);
         case Type.FCGI_PARAMS:
         case Type.FCGI_GET_VALUES:
         case Type.FCGI_GET_VALUES_RESULT:
         case Type.FCGI_ABORT_REQUEST:
-        case Type.FCGI_END_REQUEST:
         case Type.FCGI_UNKNOWN_TYPE:
         case Type.FCGI_STDIN:
         case Type.FCGI_STDOUT:
