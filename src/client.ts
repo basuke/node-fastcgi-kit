@@ -21,7 +21,7 @@ export interface Client extends EventEmitter {
     begin(role: Role, keepConn: boolean): Request;
 }
 
-export interface Request {
+export interface Request extends EventEmitter {
     id: number;
     params(pairs: Pairs): Request;
 
@@ -76,7 +76,7 @@ class ClientImpl extends EventEmitter implements Client {
                     this.emit('ready');
                 })
                 .catch((err: any) => {
-                    this.emit('error', err);
+                    this.emitError(err);
                 });
         }
     }
@@ -131,39 +131,64 @@ class ClientImpl extends EventEmitter implements Client {
         return request;
     }
 
+    getRequest(id: number): RequestImpl | undefined {
+        return this.requests.get(id);
+    }
+
     handleRecord(record: FCGIRecord): void {
+        if (record.requestId) {
+            const request = this.getRequest(record.requestId);
+            if (!request) {
+                this.emitError(`Invalid request id: ${record.requestId}`);
+                return;
+            }
+            request.handleRecord(record);
+            return;
+        }
+
         switch (record.type) {
             case Type.FCGI_GET_VALUES_RESULT:
-                this.emit(
-                    'values',
-                    this.recognizeServerValues(record.body as Pairs)
-                );
+                this.handleGetValuesResult(record.body as Pairs);
                 break;
 
             default:
-                console.error('unhandled record', record);
+                console.error('Client: unhandled record', record);
+                this.emitError(`Client: unhandled record: ${record.type}`);
                 break;
         }
-    }
-
-    recognizeServerValues(pairs: Pairs): ServerValues {
-        return {
-            maxConns: parseInt(pairs.FCGI_MAX_CONNS ?? '1'),
-            maxReqs: parseInt(pairs.FCGI_MAX_REQS ?? '1'),
-            mpxsConns: !!parseInt(pairs.FCGI_MPXS_CONNS ?? '0'),
-        };
     }
 
     issueRequestId(): number {
         return this.idBag.issue();
     }
+
+    handleGetValuesResult(body: Pairs | null) {
+        if (body) {
+            const values = {
+                maxConns: parseInt(body.FCGI_MAX_CONNS ?? '1'),
+                maxReqs: parseInt(body.FCGI_MAX_REQS ?? '1'),
+                mpxsConns: !!parseInt(body.FCGI_MPXS_CONNS ?? '0'),
+            };
+
+            this.emit('values', values);
+        }
+    }
+
+    emitError(error: string | Error) {
+        if (typeof error === 'string') {
+            error = new Error(error);
+        }
+        this.emit('error', error);
+    }
 }
 
-class RequestImpl implements Request {
+class RequestImpl extends EventEmitter implements Request {
     client: ClientImpl;
     id: number;
 
     constructor(client: ClientImpl) {
+        super();
+
         this.client = client;
         this.id = client.issueRequestId();
     }
@@ -206,6 +231,24 @@ class RequestImpl implements Request {
         }
     }
 
+    handleRecord(record: FCGIRecord): void {
+        switch (record.type) {
+            case Type.FCGI_STDOUT:
+            case Type.FCGI_STDERR:
+                if (record.body) {
+                    if (record.body instanceof Buffer) {
+                        this.handleOutput(
+                            record.body,
+                            record.type === Type.FCGI_STDERR
+                        );
+                    } else {
+                        this.emitError('Invalid body for stdout|strerr');
+                    }
+                }
+                break;
+        }
+    }
+
     sendBuffer(buffer: Buffer): Request {
         return this.write(Type.FCGI_STDIN, buffer);
     }
@@ -221,6 +264,14 @@ class RequestImpl implements Request {
     }
 
     done(): Request {
-        return this;
+        return this.write(Type.FCGI_STDIN);
+    }
+
+    handleOutput(buffer: Buffer, stderr: boolean) {
+        this.emit(stderr ? 'error' : 'data', buffer);
+    }
+
+    emitError(error: string | Error) {
+        this.client.emit('error', error);
     }
 }
