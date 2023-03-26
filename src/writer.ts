@@ -8,6 +8,7 @@ import {
     Type,
 } from './record';
 import { Readable, Writable } from 'node:stream';
+import { Pairs } from './keyvalues';
 
 export interface Writer {
     readonly alignment: number;
@@ -78,7 +79,10 @@ class WriterImpl implements Writer {
                 }
             });
         } else if (record.type === Type.FCGI_PARAMS) {
-            this.stream.write(encode(record, this.alignment));
+            const body = record.body as Pairs;
+            if (typeof body === 'object' && Object.keys(body).length > 0) {
+                this.stream.write(encode(record, this.alignment));
+            }
             this.stream.write(encode(setBody(record, null), this.alignment));
         } else {
             const header = encode(record, this.alignment);

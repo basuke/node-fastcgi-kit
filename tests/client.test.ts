@@ -9,6 +9,7 @@ import {
 } from '../src/record';
 import { bytestr as B, once, StreamPair, tick } from '../src/utils';
 import { createWriter } from '../src/writer';
+import { Readable } from 'node:stream';
 
 function clientForTest({ skipServerValues = true } = {}) {
     const [stream, other] = StreamPair.create();
@@ -139,7 +140,7 @@ describe('Client', () => {
         async function doIt() {
             const { sentRecords, request } = await requestForTest();
 
-            request.sendParams(headers);
+            request.params(headers);
             await tick();
 
             return { records: sentRecords.slice(1) };
@@ -151,5 +152,59 @@ describe('Client', () => {
         expect(records[0].body).not.toBe(headers);
     });
 
+    test('can send empty params and receive one record', async () => {
+        async function doIt() {
+            const { sentRecords, request } = await requestForTest();
+
+            request.params({});
+            await tick();
+
+            return { records: sentRecords.slice(1) };
+        }
+
+        const { records } = await doIt();
+        expect(records.length).toBe(1);
+        expect(records[0].body).toEqual({});
+    });
+
     test('can send LARGE params over request', async () => {});
+
+    test('can send stdin as string', async () => {
+        async function doIt() {
+            const { request, sentRecords } = await requestForTest();
+            request.params({}).send('Hello world');
+            await tick();
+            return sentRecords.slice(2);
+        }
+
+        const records = await doIt();
+        expect(records.length).toBe(1);
+        const body = records[0].body as Buffer;
+        expect(body).toEqual(B`${'Hello world'}`);
+    });
+
+    test('can send stdin from stream', async () => {
+        async function doIt() {
+            const { request, sentRecords } = await requestForTest();
+            const source = Readable.from(['Hello world\n', B`01 23 45 67 89`]);
+            request.params({}).send(source);
+
+            await tick();
+            return sentRecords.slice(2);
+        }
+
+        const records = await doIt();
+        expect(records.length).toBe(2);
+        const body1 = records[0].body as Buffer;
+        expect(body1).toEqual(B`${'Hello world\n'}`);
+
+        const body2 = records[1].body as Buffer;
+        expect(body2).toEqual(B`0123456789`);
+    });
+
+    test('must receive stdout after sending params', async () => {});
+    test('might receive stderr', async () => {});
+
+    test('after receiving EndRequest, request must be closed', async () => {});
+    test('when request is finished, the id is available to use', async () => {});
 });

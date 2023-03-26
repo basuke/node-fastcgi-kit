@@ -1,4 +1,4 @@
-import { Duplex } from 'node:stream';
+import { Duplex, Readable } from 'node:stream';
 import { Reader } from './reader';
 import { BeginRequestBody, FCGIRecord, makeRecord, Role, Type } from './record';
 import { createWriter, Writer } from './writer';
@@ -23,7 +23,12 @@ export interface Client extends EventEmitter {
 
 export interface Request {
     id: number;
-    sendParams(pairs: Pairs): void;
+    params(pairs: Pairs): Request;
+
+    send(body: string): Request;
+    send(body: Buffer): Request;
+    send(stream: Readable): Request;
+    done(): Request;
 }
 
 export function createClientWithStream(
@@ -163,13 +168,14 @@ class RequestImpl implements Request {
         this.id = client.issueRequestId();
     }
 
-    send(
+    write(
         type: Type,
         body: Buffer | Pairs | BeginRequestBody | null = null
-    ): void {
+    ): Request {
         const record = this.makeRecord(type, body);
-        console.log('Request:send', record);
+        // console.log('Request:send', record);
         this.client.writer.write(record);
+        return this;
     }
 
     makeRecord(
@@ -179,14 +185,42 @@ class RequestImpl implements Request {
         return makeRecord(type, this.id, body);
     }
 
-    sendBegin(role: Role, keepConn: boolean): void {
-        this.send(
+    sendBegin(role: Role, keepConn: boolean): Request {
+        return this.write(
             Type.FCGI_BEGIN_REQUEST,
             new BeginRequestBody(role, keepConn)
         );
     }
 
-    sendParams(pairs: Pairs): void {
-        this.send(Type.FCGI_PARAMS, pairs);
+    params(pairs: Pairs): Request {
+        return this.write(Type.FCGI_PARAMS, pairs);
+    }
+
+    send(arg: string | Buffer | Readable): Request {
+        if (typeof arg === 'string') {
+            return this.sendBuffer(Buffer.from(arg));
+        } else if (arg instanceof Buffer) {
+            return this.sendBuffer(arg);
+        } else {
+            return this.sendFromStream(arg);
+        }
+    }
+
+    sendBuffer(buffer: Buffer): Request {
+        return this.write(Type.FCGI_STDIN, buffer);
+    }
+
+    sendFromStream(stream: Readable): Request {
+        stream.on('data', (chunk: Buffer) => {
+            if (typeof chunk === 'string') {
+                chunk = Buffer.from(chunk);
+            }
+            this.sendBuffer(chunk);
+        });
+        return this;
+    }
+
+    done(): Request {
+        return this;
     }
 }
