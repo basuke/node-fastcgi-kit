@@ -53,7 +53,7 @@ class WriterImpl implements Writer {
                 readSize += chunk.byteLength;
             };
 
-            stream.on('data', (chunk: any) => {
+            stream.on('data', (chunk: string | Buffer) => {
                 if (chunk instanceof Buffer) {
                     processChunk(chunk);
                 } else if (typeof chunk === 'string') {

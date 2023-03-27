@@ -1,11 +1,6 @@
 import { decodableSize, decode, FCGIRecord, Type } from './record';
 import { Writable } from 'node:stream';
-import {
-    decode as decodePairs,
-    Pairs,
-    StreamDecoder as ParamsDecoder,
-    StreamDecoder,
-} from './keyvalues';
+import { StreamDecoder as ParamsDecoder, StreamDecoder } from './keyvalues';
 
 export class Reader extends Writable {
     remaining: Buffer | null = null;

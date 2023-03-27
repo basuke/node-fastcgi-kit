@@ -134,11 +134,11 @@ export function once<T>(
 }
 
 export class MinBag {
-    maxIssued: number = 0;
+    maxIssued = 0;
     available: number[] = [];
     readonly needCheck: boolean;
 
-    constructor(needCheck: boolean = false) {
+    constructor(needCheck = false) {
         this.needCheck = needCheck;
     }
 

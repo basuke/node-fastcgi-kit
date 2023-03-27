@@ -51,7 +51,7 @@ export interface Request extends EventEmitter {
 
 export function createClientWithStream(
     stream: Duplex,
-    skipServerValues: boolean = true
+    skipServerValues = true
 ): Client {
     const client = new ClientImpl(stream, skipServerValues);
     return client;
@@ -65,11 +65,11 @@ class ClientImpl extends EventEmitter implements Client {
     writer: Writer;
     requests: Map<number, RequestImpl> = new Map();
     idBag: MinBag = new MinBag();
-    maxConns: number = 1;
-    maxReqs: number = 1;
-    mpxsConns: boolean = false;
+    maxConns = 1;
+    maxReqs = 1;
+    mpxsConns = false;
 
-    constructor(stream: Duplex, skipServerValues: boolean = false) {
+    constructor(stream: Duplex, skipServerValues = false) {
         super();
 
         this.stream = stream;
@@ -93,7 +93,7 @@ class ClientImpl extends EventEmitter implements Client {
 
                     this.emit('ready');
                 })
-                .catch((err: any) => {
+                .catch((err: Error) => {
                     this.emitError(err);
                 });
         }
@@ -208,7 +208,7 @@ class ClientImpl extends EventEmitter implements Client {
 class RequestImpl extends EventEmitter implements Request {
     client: ClientImpl;
     id: number;
-    closed: boolean = false;
+    closed = false;
 
     constructor(client: ClientImpl) {
         super();
@@ -308,7 +308,7 @@ class RequestImpl extends EventEmitter implements Request {
     handleEndRequest(body: EndRequestBody): void {
         this.closed = true;
         this.client.endRequest(this.id);
-        this.emit('end');
+        this.emit('end', body.appStatus);
     }
 
     emitError(error: string | Error) {

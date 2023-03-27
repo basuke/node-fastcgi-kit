@@ -39,7 +39,7 @@ export class BeginRequestBody {
     readonly role: Role;
     readonly keepConnection: boolean;
 
-    static bufferSize: number = 8;
+    static bufferSize = 8;
 
     constructor(role: Role, keepConnection: boolean) {
         this.role = role;
@@ -72,7 +72,7 @@ export class EndRequestBody {
     readonly appStatus: number;
     readonly protocolStatus: number;
 
-    static bufferSize: number = 8;
+    static bufferSize = 8;
 
     constructor(appStatus: number, protocolStatus: number) {
         this.appStatus = appStatus;
@@ -93,8 +93,6 @@ export class EndRequestBody {
 
     static decode(buffer: Buffer): EndRequestBody | null {
         if (buffer.byteLength !== EndRequestBody.bufferSize) return null;
-        const val1 = word(buffer[0], buffer[1]);
-        const val2 = word(buffer[0], buffer[1]);
         const appStatus = dword(
             word(buffer[0], buffer[1]),
             word(buffer[2], buffer[3])
@@ -131,7 +129,7 @@ export interface Header {
 
 export function makeRecord(
     type: Type,
-    requestId: number = 0,
+    requestId = 0,
     body: RecordBody = null
 ): FCGIRecord {
     return {
@@ -195,7 +193,7 @@ export function paddingSize(contentLength: number, alignment: number): number {
 export function encode(
     record: FCGIRecord,
     alignment: number = defaultAlignment,
-    headerOnly: boolean = false
+    headerOnly = false
 ): Buffer {
     if (alignment > maxAlignment) {
         throw new RangeError(`alignment must be <= ${maxAlignment}`);
