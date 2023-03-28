@@ -1,4 +1,6 @@
 import { Duplex, Readable } from 'node:stream';
+import { EventEmitter } from 'node:events';
+import { createConnection, NetConnectOpts } from 'node:net';
 import { Reader } from './reader';
 import {
     BeginRequestBody,
@@ -9,7 +11,6 @@ import {
     Type,
 } from './record';
 import { createWriter, Writer } from './writer';
-import { EventEmitter } from 'node:events';
 import { Pairs } from './keyvalues';
 import { MinBag, once } from './utils';
 
@@ -17,6 +18,11 @@ export interface ServerValues {
     maxConns: number;
     maxReqs: number;
     mpxsConns: boolean;
+}
+
+export function createClient(options: ClientOptions): Client {
+    const client = new ClientImpl(options);
+    return client;
 }
 
 export interface Client extends EventEmitter {
@@ -49,27 +55,36 @@ export interface Request extends EventEmitter {
     on(event: 'end', listener: () => void): this;
 }
 
-export function createClientWithStream(
-    stream: Duplex,
-    skipServerValues = true
-): Client {
-    const client = new ClientImpl(stream, skipServerValues);
-    return client;
+export type Connector = (options: ConnectOptions) => Promise<Duplex>;
+
+export interface Connection extends EventEmitter {
+    send(record: FCGIRecord): void;
+
+    on(event: 'connect', listener: () => void): this;
+    on(event: 'record', listener: (record: FCGIRecord) => void): this;
+    on(event: 'close', listener: (status: number) => void): this;
 }
+
+export type ConnectOptions = {
+    host?: string;
+    port?: number;
+    connector?: Connector;
+};
+
+export type ServerOptions = {
+    skipServerValues?: boolean;
+};
+
+export type ClientOptions = ConnectOptions & ServerOptions;
 
 const valuesToGet = ['FCGI_MAX_CONNS', 'FCGI_MAX_REQS', 'FCGI_MPXS_CONNS'];
 
-class ClientImpl extends EventEmitter implements Client {
+class ConnectionImpl extends EventEmitter implements Connection {
     stream: Duplex;
     reader: Reader;
     writer: Writer;
-    requests: Map<number, RequestImpl> = new Map();
-    idBag: MinBag = new MinBag();
-    maxConns = 1;
-    maxReqs = 1;
-    mpxsConns = false;
 
-    constructor(stream: Duplex, skipServerValues = false) {
+    constructor(stream: Duplex) {
         super();
 
         this.stream = stream;
@@ -77,12 +92,65 @@ class ClientImpl extends EventEmitter implements Client {
         this.reader = new Reader();
         this.stream.pipe(this.reader);
         this.reader.on('record', (record: FCGIRecord) =>
-            this.handleRecord(record)
+            this.emit('record', record)
         );
 
         this.writer = createWriter(this.stream);
+    }
 
-        if (skipServerValues) {
+    send(record: FCGIRecord): void {
+        this.writer.write(record);
+    }
+}
+
+class NullConnection extends EventEmitter implements Connection {
+    send(record: FCGIRecord): void {
+        throw new Error('Not connected');
+    }
+}
+
+function connectToHost(options: ConnectOptions): Promise<Duplex> {
+    const opts: NetConnectOpts = {
+        port: options.port ?? 9000,
+        host: options.host ?? 'localhost',
+    };
+
+    return new Promise((resolve, reject) => {
+        const conn = createConnection(opts);
+        conn.on('connect', () => {
+            resolve(conn);
+        });
+        conn.on('error', reject);
+    });
+}
+
+class ClientImpl extends EventEmitter implements Client {
+    readonly options: ClientOptions;
+    connection: Connection;
+    requests: Map<number, RequestImpl> = new Map();
+    idBag: MinBag = new MinBag();
+    maxConns = 1;
+    maxReqs = 1;
+    mpxsConns = false;
+
+    constructor(options: ClientOptions) {
+        super();
+
+        this.options = options;
+        this.connection = new NullConnection();
+
+        this.connect();
+    }
+
+    async connect(): Promise<void> {
+        const connector = this.options.connector ?? connectToHost;
+        this.connection = new ConnectionImpl(await connector(this.options));
+
+        this.connection.on('record', (record: FCGIRecord) =>
+            this.handleRecord(record)
+        );
+
+        if (this.options.skipServerValues) {
             setImmediate(() => this.emit('ready'));
         } else {
             this.getServerValues()
@@ -99,17 +167,13 @@ class ClientImpl extends EventEmitter implements Client {
         }
     }
 
-    send(record: FCGIRecord): void {
-        this.writer.write(record);
-    }
-
     async getServerValues(): Promise<ServerValues> {
         const valuesToAsk = valuesToGet.reduce((result: Pairs, name) => {
             result[name] = '';
             return result;
         }, {});
         const record = makeRecord(Type.FCGI_GET_VALUES, 0, valuesToAsk);
-        this.send(record);
+        this.connection.send(record);
 
         return once<ServerValues>(this, 'values', 3000);
     }
@@ -223,7 +287,7 @@ class RequestImpl extends EventEmitter implements Request {
     ): this {
         const record = this.makeRecord(type, body);
         // console.log('Request:send', record);
-        this.client.writer.write(record);
+        this.client.connection.send(record);
         return this;
     }
 

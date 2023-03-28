@@ -1,4 +1,9 @@
-import { createClientWithStream, Request } from '../src/client';
+import {
+    ClientOptions,
+    ConnectOptions,
+    createClient,
+    Request,
+} from '../src/client';
 import { Reader } from '../src/reader';
 import {
     BeginRequestBody,
@@ -35,7 +40,13 @@ function clientForTest({
 
     const writer = createWriter(other);
 
-    const client = createClientWithStream(stream, skipServerValues);
+    const options: ClientOptions = {
+        connector: async (options: ConnectOptions): Promise<StreamPair> =>
+            stream,
+        skipServerValues,
+    };
+
+    const client = createClient(options);
 
     function sendToClient(type: Type, id: number, body: RecordBody) {
         writer.write(makeRecord(type, id, body));
@@ -101,6 +112,7 @@ describe('Client', () => {
 
             other.on('data', (_: any) => writer.write(serverValuesResult()));
 
+            await tick();
             return client.getServerValues();
         }
         const values = await doIt();
