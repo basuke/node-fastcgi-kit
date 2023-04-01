@@ -28,14 +28,15 @@ export function createClient(options: ClientOptions): Client {
 export interface Client extends EventEmitter {
     getServerValues(): Promise<ServerValues>;
 
-    begin(): Request;
-    begin(role: Role): Request;
-    begin(keepConn: boolean): Request;
-    begin(role: Role, keepConn: boolean): Request;
+    begin(): Promise<Request>;
+    begin(role: Role): Promise<Request>;
+    begin(keepConn: boolean): Promise<Request>;
+    begin(role: Role, keepConn: boolean): Promise<Request>;
 
     getRequest(id: number): Request | undefined;
 
     on(event: 'ready', listener: () => void): this;
+    on(event: 'end', listener: () => void): this;
     on(event: 'error', listener: (err: Error) => void): this;
 }
 
@@ -59,6 +60,7 @@ export type Connector = (options: ConnectOptions) => Promise<Duplex>;
 
 export interface Connection extends EventEmitter {
     send(record: FCGIRecord): void;
+    end(): void;
 
     on(event: 'connect', listener: () => void): this;
     on(event: 'record', listener: (record: FCGIRecord) => void): this;
@@ -99,6 +101,10 @@ class ConnectionImpl extends EventEmitter implements Connection {
             this.emit('record', record);
         });
 
+        stream.on('end', () => {
+            console.log('Stream ended');
+            this.emit('end');
+        });
         this.writer = createWriter(this.stream);
     }
 
@@ -106,11 +112,9 @@ class ConnectionImpl extends EventEmitter implements Connection {
         this.writer.write(record);
         if (this.debug) console.log('sent:', record);
     }
-}
 
-class NullConnection extends EventEmitter implements Connection {
-    send(record: FCGIRecord): void {
-        throw new Error('Not connected');
+    end(): void {
+        this.stream.end();
     }
 }
 
@@ -122,16 +126,17 @@ function connectToHost(options: ConnectOptions): Promise<Duplex> {
 
     return new Promise((resolve, reject) => {
         const conn = createConnection(opts);
-        conn.on('connect', () => {
+        conn.once('connect', () => {
+            conn.removeAllListeners();
             resolve(conn);
         });
-        conn.on('error', reject);
+        conn.once('error', reject);
     });
 }
 
 class ClientImpl extends EventEmitter implements Client {
     readonly options: ClientOptions;
-    connection: Connection;
+    keptConnection: Connection | undefined;
     requests: Map<number, RequestImpl> = new Map();
     idBag: MinBag = new MinBag();
     maxConns = 1;
@@ -142,21 +147,6 @@ class ClientImpl extends EventEmitter implements Client {
         super();
 
         this.options = options;
-        this.connection = new NullConnection();
-
-        this.connect();
-    }
-
-    async connect(): Promise<void> {
-        const { connector = connectToHost, debug = false } = this.options;
-        this.connection = new ConnectionImpl(
-            await connector(this.options),
-            debug
-        );
-
-        this.connection.on('record', (record: FCGIRecord) =>
-            this.handleRecord(record)
-        );
 
         if (this.options.skipServerValues) {
             setImmediate(() => this.emit('ready'));
@@ -175,18 +165,47 @@ class ClientImpl extends EventEmitter implements Client {
         }
     }
 
+    async connect(keepConn: boolean): Promise<Connection> {
+        if (keepConn && this.keptConnection) return this.keptConnection;
+
+        const { connector = connectToHost, debug = false } = this.options;
+        const connection = new ConnectionImpl(
+            await connector(this.options),
+            debug
+        );
+
+        connection.on('record', (record: FCGIRecord) =>
+            this.handleRecord(record)
+        );
+
+        if (keepConn) {
+            this.keptConnection = connection;
+        }
+
+        return connection;
+    }
+
     async getServerValues(): Promise<ServerValues> {
+        const connection = await this.connect(
+            this.keptConnection !== undefined
+        );
+
         const valuesToAsk = valuesToGet.reduce((result: Pairs, name) => {
             result[name] = '';
             return result;
         }, {});
         const record = makeRecord(Type.FCGI_GET_VALUES, 0, valuesToAsk);
-        this.connection.send(record);
+        connection.send(record);
 
-        return once<ServerValues>(this, 'values', 3000);
+        const values = await once<ServerValues>(this, 'values', 3000);
+        if (values.mpxsConns && !this.keptConnection) {
+            this.keptConnection = connection;
+        }
+
+        return values;
     }
 
-    begin(arg1?: Role | boolean, arg2?: boolean): Request {
+    async begin(arg1?: Role | boolean, arg2?: boolean): Promise<Request> {
         const detectRole = (): Role => {
             if (arguments.length === 2) {
                 if (typeof arg1 === 'boolean')
@@ -214,7 +233,13 @@ class ClientImpl extends EventEmitter implements Client {
         const role = detectRole();
         const keepConn = detectKeepConn();
 
-        const request = new RequestImpl(this);
+        const request = new RequestImpl(
+            this,
+            await this.connect(this.mpxsConns),
+            this.issueRequestId(),
+            role,
+            keepConn
+        );
 
         this.requests.set(request.id, request);
         request.sendBegin(role, keepConn);
@@ -226,8 +251,11 @@ class ClientImpl extends EventEmitter implements Client {
     }
 
     endRequest(id: number): void {
-        this.requests.delete(id);
-        this.idBag.putBack(id);
+        const request = this.getRequest(id);
+        if (request) {
+            this.requests.delete(id);
+            this.idBag.putBack(id);
+        }
     }
 
     handleRecord(record: FCGIRecord): void {
@@ -279,14 +307,26 @@ class ClientImpl extends EventEmitter implements Client {
 
 class RequestImpl extends EventEmitter implements Request {
     client: ClientImpl;
+    connection: Connection;
     id: number;
     closed = false;
+    role: Role;
+    keepConnection: boolean;
 
-    constructor(client: ClientImpl) {
+    constructor(
+        client: ClientImpl,
+        connection: Connection,
+        id: number,
+        role: Role,
+        keepConnection: boolean
+    ) {
         super();
 
         this.client = client;
-        this.id = client.issueRequestId();
+        this.connection = connection;
+        this.id = id;
+        this.role = role;
+        this.keepConnection = keepConnection;
     }
 
     write(
@@ -295,7 +335,7 @@ class RequestImpl extends EventEmitter implements Request {
     ): this {
         const record = this.makeRecord(type, body);
         // console.log('Request:send', record);
-        this.client.connection.send(record);
+        this.connection.send(record);
         return this;
     }
 
@@ -378,12 +418,24 @@ class RequestImpl extends EventEmitter implements Request {
     }
 
     handleEndRequest(body: EndRequestBody): void {
-        this.closed = true;
         this.client.endRequest(this.id);
-        this.emit('end', body.appStatus);
+        if (this.keepConnection) {
+            this.emit('end', body.appStatus);
+        } else {
+            this.connection.once('end', () => this.emit('end', body.appStatus));
+        }
+        this.close();
+    }
+
+    close(): void {
+        if (!this.keepConnection) {
+            this.connection.end();
+        }
+        this.closed = true;
     }
 
     emitError(error: string | Error) {
+        this.close();
         this.client.emit('error', error);
     }
 }

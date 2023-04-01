@@ -78,7 +78,7 @@ async function requestForTest({
     try {
         await once(client, 'ready', 5000);
         for (let i = 0; i < count; i++) {
-            requests.push(client.begin());
+            requests.push(await client.begin());
         }
     } catch (e) {
         console.error(e);

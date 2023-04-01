@@ -1,5 +1,6 @@
 import { Duplex, PassThrough } from 'node:stream';
 import { EventEmitter } from 'node:events';
+import { execSync } from 'node:child_process';
 
 export function alignedSize(size: number, alignment: number): number {
     return Math.floor((size + alignment - 1) / alignment) * alignment;
@@ -174,5 +175,14 @@ export class MinBag {
                 );
             }
         }
+    }
+}
+
+export function findExec(command: string): boolean {
+    try {
+        execSync(`which ${command}`, { stdio: 'ignore' });
+        return true;
+    } catch (_e) {
+        return false;
     }
 }
