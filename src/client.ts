@@ -69,6 +69,7 @@ export type ConnectOptions = {
     host?: string;
     port?: number;
     connector?: Connector;
+    debug?: boolean;
 };
 
 export type ServerOptions = {
@@ -83,23 +84,27 @@ class ConnectionImpl extends EventEmitter implements Connection {
     stream: Duplex;
     reader: Reader;
     writer: Writer;
+    debug: boolean;
 
-    constructor(stream: Duplex) {
+    constructor(stream: Duplex, debug: boolean) {
         super();
 
         this.stream = stream;
+        this.debug = debug;
 
         this.reader = new Reader();
         this.stream.pipe(this.reader);
-        this.reader.on('record', (record: FCGIRecord) =>
-            this.emit('record', record)
-        );
+        this.reader.on('record', (record: FCGIRecord) => {
+            if (this.debug) console.log('received:', record);
+            this.emit('record', record);
+        });
 
         this.writer = createWriter(this.stream);
     }
 
     send(record: FCGIRecord): void {
         this.writer.write(record);
+        if (this.debug) console.log('sent:', record);
     }
 }
 
@@ -143,8 +148,11 @@ class ClientImpl extends EventEmitter implements Client {
     }
 
     async connect(): Promise<void> {
-        const connector = this.options.connector ?? connectToHost;
-        this.connection = new ConnectionImpl(await connector(this.options));
+        const { connector = connectToHost, debug = false } = this.options;
+        this.connection = new ConnectionImpl(
+            await connector(this.options),
+            debug
+        );
 
         this.connection.on('record', (record: FCGIRecord) =>
             this.handleRecord(record)
