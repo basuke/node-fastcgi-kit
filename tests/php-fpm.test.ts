@@ -6,6 +6,7 @@ const describeIf = (condition: boolean) =>
     condition ? describe : describe.skip;
 
 const phpFpm = 'php-fpm';
+const phpFpmExists = findExec(phpFpm);
 
 function params() {
     const script_dir = join(__dirname, 'php');
@@ -29,31 +30,34 @@ function params() {
     };
 }
 
-describeIf(findExec(phpFpm))('Test with php-fpm', () => {
+describeIf(phpFpmExists)('Test with php-fpm', () => {
     test('connect to php-fpm', (done) => {
         const client = createClient({
             host: 'localhost',
-            // host: 'sakadana.local',
             port: 9000,
-            debug: true,
-            // skipServerValues: true,
+            debug: false,
         });
 
         client.on('ready', async () => {
-            console.log('client', client);
-
             const request = await client.begin(false);
+
+            let body: string = '';
+            let stderr: string = '';
 
             request.params(params());
 
             request.on('stdout', (buffer: Buffer) => {
-                console.log(buffer);
-                console.log(buffer.toString());
+                body += buffer.toString();
             });
             request.on('stderr', (err: string) => {
-                console.error(err);
+                stderr += err;
             });
-            request.on('end', done);
+            request.on('end', (appStatus: number) => {
+                expect(appStatus).toBe(0);
+                expect(body).toContain('Hello world from PHP');
+                expect(stderr.length).toBe(0);
+                done();
+            });
 
             request.done();
         });
