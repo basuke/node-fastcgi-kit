@@ -272,15 +272,20 @@ describe('Client', () => {
     test('after receiving EndRequest, request must be closed and the id is available', async () => {
         const content = B`${'Hello'}`;
         async function doIt() {
-            const { client, request, sendToRequest } = await requestForTest({
-                onRecord: (record) => {
-                    if (record.type !== Type.FCGI_PARAMS) return;
+            const { client, request, sendToRequest, other } =
+                await requestForTest({
+                    onRecord: (record) => {
+                        if (record.type !== Type.FCGI_PARAMS) return;
 
-                    sendToRequest(Type.FCGI_STDOUT, content);
-                    sendToRequest(Type.FCGI_STDOUT, null);
-                    sendToRequest(Type.FCGI_END_REQUEST, B`00000000 00 000000`);
-                },
-            });
+                        sendToRequest(Type.FCGI_STDOUT, content);
+                        sendToRequest(Type.FCGI_STDOUT, null);
+                        sendToRequest(
+                            Type.FCGI_END_REQUEST,
+                            B`00000000 00 000000`
+                        );
+                        other.end();
+                    },
+                });
 
             let closed = false;
             request.on('end', () => {

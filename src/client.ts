@@ -53,7 +53,7 @@ export interface Request extends EventEmitter {
 
     on(event: 'stdout', listener: (buffer: Buffer) => void): this;
     on(event: 'stderr', listener: (error: string) => void): this;
-    on(event: 'end', listener: () => void): this;
+    on(event: 'end', listener: (appStatus: number) => void): this;
 }
 
 export type Connector = (options: ConnectOptions) => Promise<Duplex>;
@@ -102,7 +102,7 @@ class ConnectionImpl extends EventEmitter implements Connection {
         });
 
         stream.on('end', () => {
-            console.log('Stream ended');
+            if (this.debug) console.log('Stream ended');
             this.emit('end');
         });
         this.writer = createWriter(this.stream);
@@ -241,8 +241,18 @@ class ClientImpl extends EventEmitter implements Client {
             keepConn
         );
 
-        this.requests.set(request.id, request);
         request.sendBegin(role, keepConn);
+        if (this.options.debug) {
+            request.on('stdout', (buffer: Buffer) => {
+                console.log(buffer);
+                console.log(buffer.toString());
+            });
+            request.on('stderr', (err: string) => {
+                console.error(err);
+            });
+        }
+
+        this.requests.set(request.id, request);
         return request;
     }
 
@@ -334,7 +344,6 @@ class RequestImpl extends EventEmitter implements Request {
         body: Buffer | Pairs | BeginRequestBody | null = null
     ): this {
         const record = this.makeRecord(type, body);
-        // console.log('Request:send', record);
         this.connection.send(record);
         return this;
     }
