@@ -14,9 +14,10 @@
         "build": "rollup -c",
         "lint": "eslint --fix 'src/**/*.ts'"
     },
-    "keywords": [],
-    "author": "",
-    "license": "MIT",
+    "keywords": [
+        "FastCGI",
+        "PHP"
+    ],
     "devDependencies": {
         "@types/jest": "^29.4.0",
         "@typescript-eslint/eslint-plugin": "^5.54.1",
@@ -30,5 +31,15 @@
         "rollup-plugin-esbuild": "^5.0.0",
         "ts-jest": "^29.0.5",
         "typescript": "^4.9.5"
-    }
+    },
+    "repository": {
+        "type": "git",
+        "url": "git+https://github.com/basuke/node-fastcgi-kit.git"
+    },
+    "author": "Basuke Suzuki",
+    "license": "MIT",
+    "bugs": {
+        "url": "https://github.com/basuke/node-fastcgi-kit/issues"
+    },
+    "homepage": "https://github.com/basuke/node-fastcgi-kit#readme"
 }
