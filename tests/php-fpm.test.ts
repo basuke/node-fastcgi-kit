@@ -8,15 +8,11 @@ const describeIf = (condition: boolean) =>
 const phpFpm = 'php-fpm';
 const phpFpmExists = findExec(phpFpm);
 
-function params() {
+function params(script_file: string = '/hello.php') {
     const script_dir = join(__dirname, 'php');
-    const script_file = '/hello.php';
     const script_path = join(script_dir, script_file);
 
     return {
-        GATEWAY_PROTOCOL: 'CGI/1.1',
-        SERVER_SOFTWARE: 'fastcgi-kit; node/' + process.version,
-        REMOTE_ADDR: '192.0.1.23',
         QUERY_STRING: '',
         REQUEST_METHOD: 'GET',
         REQUEST_URI: 'http://localhost/hello/world',
@@ -25,7 +21,6 @@ function params() {
         SCRIPT_NAME: script_file,
         PATH_INFO: script_file,
         DOCUMENT_URI: script_file,
-        DOCUMENT_ROOT: script_dir,
         PHP_SELF: script_file,
     };
 }
@@ -36,6 +31,43 @@ describeIf(phpFpmExists)('Test with php-fpm', () => {
             host: 'localhost',
             port: 9000,
             debug: false,
+            params: {
+                DOCUMENT_ROOT: __dirname,
+            },
+        });
+
+        client.on('ready', async () => {
+            const request = await client.get('http://localhost/php/hello.php');
+
+            let body: string = '';
+            let stderr: string = '';
+
+            request.on('stdout', (buffer: Buffer) => {
+                body += buffer.toString();
+            });
+            request.on('stderr', (err: string) => {
+                stderr += err;
+            });
+            request.on('end', (appStatus: number) => {
+                expect(appStatus).toBe(0);
+                expect(body).toContain('Hello world from PHP');
+                expect(stderr.length).toBe(0);
+                done();
+            });
+        });
+    });
+
+    test('connect to php-fpm: low-level', (done) => {
+        const client = createClient({
+            host: 'localhost',
+            port: 9000,
+            debug: false,
+            params: {
+                REMOTE_ADDR: '127.0.0.1',
+                GATEWAY_PROTOCOL: 'CGI/1.1',
+                SERVER_SOFTWARE: 'fastcgi-kit; node/' + process.version,
+                DOCUMENT_ROOT: __dirname,
+            },
         });
 
         client.on('ready', async () => {

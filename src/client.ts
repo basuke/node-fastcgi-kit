@@ -1,6 +1,7 @@
 import { Duplex, Readable } from 'node:stream';
 import { EventEmitter } from 'node:events';
 import { createConnection, NetConnectOpts } from 'node:net';
+import path from 'node:path';
 import { Reader } from './reader';
 import {
     BeginRequestBody,
@@ -26,6 +27,21 @@ export function createClient(options: ClientOptions): Client {
 }
 
 export interface Client extends EventEmitter {
+    get(url: string): Promise<Request>;
+    get(url: string, params: Pairs): Promise<Request>;
+    post(url: string, body: string | Buffer | Readable): Promise<Request>;
+    post(
+        url: string,
+        body: string | Buffer | Readable,
+        params: Pairs
+    ): Promise<Request>;
+
+    on(event: 'ready', listener: () => void): this;
+    on(event: 'end', listener: () => void): this;
+    on(event: 'error', listener: (err: Error) => void): this;
+
+    // low level interface
+
     getServerValues(): Promise<ServerValues>;
 
     begin(): Promise<Request>;
@@ -34,10 +50,6 @@ export interface Client extends EventEmitter {
     begin(role: Role, keepConn: boolean): Promise<Request>;
 
     getRequest(id: number): Request | undefined;
-
-    on(event: 'ready', listener: () => void): this;
-    on(event: 'end', listener: () => void): this;
-    on(event: 'error', listener: (err: Error) => void): this;
 }
 
 export interface Request extends EventEmitter {
@@ -76,11 +88,19 @@ export type ConnectOptions = {
 
 export type ServerOptions = {
     skipServerValues?: boolean;
+    params?: Pairs;
 };
 
 export type ClientOptions = ConnectOptions & ServerOptions;
 
 const valuesToGet = ['FCGI_MAX_CONNS', 'FCGI_MAX_REQS', 'FCGI_MPXS_CONNS'];
+
+const defaultParams: Pairs = {
+    REMOTE_ADDR: '127.0.0.1',
+    GATEWAY_PROTOCOL: 'CGI/1.1',
+    SERVER_SOFTWARE: 'fastcgi-kit; node/' + process.version,
+    DOCUMENT_ROOT: __dirname,
+};
 
 class ConnectionImpl extends EventEmitter implements Connection {
     stream: Duplex;
@@ -183,6 +203,52 @@ class ClientImpl extends EventEmitter implements Client {
         }
 
         return connection;
+    }
+
+    urlToParams(url: URL, method: string): Pairs {
+        const documentRoot = this.options?.params?.DOCUMENT_ROOT ?? __dirname;
+        const scriptFile = url.pathname;
+
+        return {
+            DOCUMENT_ROOT: documentRoot,
+            REQUEST_METHOD: method,
+            REQUEST_URI: url.toString(),
+            QUERY_STRING: url.search.substring(1),
+
+            PHP_SELF: scriptFile,
+            SCRIPT_NAME: scriptFile,
+            SCRIPT_FILENAME: path.join(documentRoot, scriptFile),
+        };
+    }
+
+    async get(url: string, params: Pairs = {}): Promise<Request> {
+        const request = await this.begin();
+        setImmediate(() => {
+            request.params({
+                ...(this.options.params ?? {}),
+                ...this.urlToParams(new URL(url), 'GET'),
+                ...params,
+            });
+            request.done();
+        });
+        return request;
+    }
+
+    async post(
+        url: string,
+        body: string | Buffer | Readable,
+        params: Pairs = {}
+    ): Promise<Request> {
+        const request = await this.begin();
+        setImmediate(() => {
+            request.params({
+                ...(this.options.params ?? {}),
+                ...this.urlToParams(new URL(url), 'POST'),
+                ...params,
+            });
+            request.done();
+        });
+        return request;
     }
 
     async getServerValues(): Promise<ServerValues> {
@@ -363,7 +429,10 @@ class RequestImpl extends EventEmitter implements Request {
     }
 
     params(pairs: Pairs): this {
-        return this.write(Type.FCGI_PARAMS, pairs);
+        return this.write(Type.FCGI_PARAMS, {
+            ...defaultParams,
+            ...pairs,
+        });
     }
 
     send(arg: string | Buffer | Readable): this {

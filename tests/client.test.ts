@@ -16,6 +16,7 @@ import {
 import { bytestr as B, once, StreamPair, tick } from '../src/utils';
 import { createWriter } from '../src/writer';
 import { Readable } from 'node:stream';
+import { Pairs } from '../src/keyvalues';
 
 function clientForTest({
     skipServerValues = true,
@@ -181,8 +182,10 @@ describe('Client', () => {
 
         const { records } = await doIt();
         expect(records.length).toBe(1);
-        expect(records[0].body).toEqual(headers);
-        expect(records[0].body).not.toBe(headers);
+        const record = records[0];
+        const body = record.body as Pairs;
+        expect(body.Hello).toEqual('world');
+        expect(body.Foo).toEqual('bar');
     });
 
     test('can send empty params and receive one record', async () => {
@@ -197,7 +200,8 @@ describe('Client', () => {
 
         const { records } = await doIt();
         expect(records.length).toBe(1);
-        expect(records[0].body).toEqual({});
+        expect(records[0].body).not.toBeFalsy();
+        expect(records[0].body).not.toEqual({});
     });
 
     test('can send LARGE params over request', async () => {});
