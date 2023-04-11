@@ -27,14 +27,14 @@ export function createClient(options: ClientOptions): Client {
 }
 
 export interface Client extends EventEmitter {
-    get(url: string): Promise<Request>;
-    get(url: string, params: Pairs): Promise<Request>;
-    post(url: string, body: string | Buffer | Readable): Promise<Request>;
-    post(
-        url: string,
-        body: string | Buffer | Readable,
-        params: Pairs
-    ): Promise<Request>;
+    get(url: string): Promise<Response>;
+    get(url: string, params: Pairs): Promise<Response>;
+    // post(url: string, body: string | Buffer | Readable): Promise<Response>;
+    // post(
+    //     url: string,
+    //     body: string | Buffer | Readable,
+    //     params: Pairs
+    // ): Promise<Response>;
 
     on(event: 'ready', listener: () => void): this;
     on(event: 'end', listener: () => void): this;
@@ -66,6 +66,13 @@ export interface Request extends EventEmitter {
     on(event: 'stdout', listener: (buffer: Buffer) => void): this;
     on(event: 'stderr', listener: (error: string) => void): this;
     on(event: 'end', listener: (appStatus: number) => void): this;
+}
+
+export interface Response {
+    statusCode: number;
+    headers: Pairs;
+    text: string;
+    json(): any;
 }
 
 export type Connector = (options: ConnectOptions) => Promise<Duplex>;
@@ -221,9 +228,23 @@ class ClientImpl extends EventEmitter implements Client {
         };
     }
 
-    async get(url: string, params: Pairs = {}): Promise<Request> {
-        const request = await this.begin();
-        setImmediate(() => {
+    async get(url: string, params: Pairs = {}): Promise<Response> {
+        return new Promise(async (resolve, reject) => {
+            const request = await this.begin();
+            const result: Buffer[] = [];
+            let error: string = '';
+
+            request.on('stdout', (buffer: Buffer) => result.push(buffer));
+            request.on('stderr', (line: string) => (error += line));
+
+            request.on('end', (appStatus) => {
+                if (appStatus) {
+                    reject(new Error(error));
+                } else {
+                    resolve(new ResponseImpl(200, result));
+                }
+            });
+
             request.params({
                 ...(this.options.params ?? {}),
                 ...this.urlToParams(new URL(url), 'GET'),
@@ -231,24 +252,6 @@ class ClientImpl extends EventEmitter implements Client {
             });
             request.done();
         });
-        return request;
-    }
-
-    async post(
-        url: string,
-        body: string | Buffer | Readable,
-        params: Pairs = {}
-    ): Promise<Request> {
-        const request = await this.begin();
-        setImmediate(() => {
-            request.params({
-                ...(this.options.params ?? {}),
-                ...this.urlToParams(new URL(url), 'POST'),
-                ...params,
-            });
-            request.done();
-        });
-        return request;
     }
 
     async getServerValues(): Promise<ServerValues> {
@@ -515,5 +518,33 @@ class RequestImpl extends EventEmitter implements Request {
     emitError(error: string | Error) {
         this.close();
         this.client.emit('error', error);
+    }
+}
+
+class ResponseImpl implements Response {
+    statusCode: number;
+    headers: Pairs;
+    text: string;
+
+    constructor(statusCode: number, stdout: Buffer[]) {
+        this.statusCode = statusCode ?? 200;
+
+        const [headers, body] = Buffer.concat(stdout)
+            .toString()
+            .split('\r\n\r\n', 2);
+        this.headers = headers.split('\r\n').reduce((pairs, line) => {
+            const [name, value] = line.split(':', 2);
+            pairs[name.trim().toLowerCase()] = value.trim();
+            return pairs;
+        }, {} as Pairs);
+        this.text = body;
+    }
+
+    get body(): Buffer {
+        return Buffer.from(this.text);
+    }
+
+    json(): any {
+        return JSON.parse(this.text);
     }
 }

@@ -37,23 +37,11 @@ describeIf(phpFpmExists)('Test with php-fpm', () => {
         });
 
         client.on('ready', async () => {
-            const request = await client.get('http://localhost/php/hello.php');
+            const response = await client.get('http://localhost/php/hello.php');
 
-            let body: string = '';
-            let stderr: string = '';
-
-            request.on('stdout', (buffer: Buffer) => {
-                body += buffer.toString();
-            });
-            request.on('stderr', (err: string) => {
-                stderr += err;
-            });
-            request.on('end', (appStatus: number) => {
-                expect(appStatus).toBe(0);
-                expect(body).toContain('Hello world from PHP');
-                expect(stderr.length).toBe(0);
-                done();
-            });
+            expect(response.statusCode).toBe(200);
+            expect(response.text).toContain('Hello world from PHP');
+            done();
         });
     });
 
