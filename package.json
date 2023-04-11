@@ -1,10 +1,9 @@
 {
     "name": "fastcgi-kit",
-    "version": "0.2.0",
+    "version": "0.3.0",
     "description": "Modules to implement FastCGI",
     "main": "dist/index.js",
-    "module": "dist/index.mjs",
-    "type": "module",
+    "type": "commonjs",
     "typings": "dist/index.d.ts",
     "files": [
         "/dist"
