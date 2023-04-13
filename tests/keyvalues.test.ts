@@ -1,4 +1,4 @@
-import { decode, encode, Pairs } from '../src/keyvalues';
+import { decode, encode, Params } from '../src/keyvalues';
 import { bytestr as B } from '../src/utils';
 
 describe('Key-Value paire encoding', () => {
@@ -13,7 +13,7 @@ describe('Key-Value paire encoding', () => {
 
     test('name.length == 130', () => {
         const name = '0123456789'.repeat(13);
-        const values: Pairs = {};
+        const values: Params = {};
         values[name] = 'hello';
         expect(encode(values)).toEqual(
             B`${[128, 0, 0, 130]}05${name}${'hello'}`
@@ -22,52 +22,52 @@ describe('Key-Value paire encoding', () => {
 
     test('name.length == 260', () => {
         const name = '0123456789'.repeat(26);
-        const values: Pairs = {};
+        const values: Params = {};
         values[name] = 'hello';
         expect(encode(values)).toEqual(B`${[128, 0, 1, 4]}05${name}${'hello'}`);
     });
 
     test('name.length == 260', () => {
         const name = '0123456789'.repeat(26);
-        const values: Pairs = {};
+        const values: Params = {};
         values[name] = 'hello';
         expect(encode(values)).toEqual(B`${[128, 0, 1, 4]}05${name}${'hello'}`);
     });
 });
 
-describe('Decoding key-value pairs', () => {
+describe('Decoding key-value params', () => {
     test('simple pair', () => {
-        const pairs = {};
-        const remainings = decode(B`${[5, 5]} ${'hello'} ${'world'}`, pairs);
-        expect(pairs).toEqual({ hello: 'world' });
+        const params = {};
+        const remainings = decode(B`${[5, 5]} ${'hello'} ${'world'}`, params);
+        expect(params).toEqual({ hello: 'world' });
         expect(remainings).toBeNull();
     });
 
-    test('multiple pairs', () => {
-        const pairs = {};
-        decode(B`${[5, 5]} ${'helloworld'} ${[3, 3]} ${'foobar'}`, pairs);
-        expect(pairs).toEqual({ hello: 'world', foo: 'bar' });
+    test('multiple params', () => {
+        const params = {};
+        decode(B`${[5, 5]} ${'helloworld'} ${[3, 3]} ${'foobar'}`, params);
+        expect(params).toEqual({ hello: 'world', foo: 'bar' });
     });
 
     test('extra data in buffer', () => {
-        const pairs = {};
+        const params = {};
         const remainings = decode(
             B`${[5, 5]} ${'helloworld'} ${[3, 3]}`,
-            pairs
+            params
         );
-        expect(pairs).toEqual({ hello: 'world' });
+        expect(params).toEqual({ hello: 'world' });
         expect(remainings).toEqual(Buffer.from([3, 3]));
     });
 
     test('not enough data', () => {
-        const pairs = {};
-        decode(B``, pairs);
-        expect(pairs).toEqual({});
+        const params = {};
+        decode(B``, params);
+        expect(params).toEqual({});
 
-        decode(B`${[5, 5]}`, pairs);
-        expect(pairs).toEqual({});
+        decode(B`${[5, 5]}`, params);
+        expect(params).toEqual({});
 
-        decode(B`${[5, 5]} ${'Hello'}`, pairs);
-        expect(pairs).toEqual({});
+        decode(B`${[5, 5]} ${'Hello'}`, params);
+        expect(params).toEqual({});
     });
 });

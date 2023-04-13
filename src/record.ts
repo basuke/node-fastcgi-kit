@@ -1,4 +1,4 @@
-import { Pairs } from './keyvalues';
+import { Params } from './keyvalues';
 import {
     alignedSize,
     dword,
@@ -103,7 +103,7 @@ export class EndRequestBody {
 }
 
 type EncodableBody = Buffer | BeginRequestBody | EndRequestBody | null;
-export type RecordBody = EncodableBody | Pairs;
+export type RecordBody = EncodableBody | Params;
 
 interface EncodableRecord {
     type: Type;

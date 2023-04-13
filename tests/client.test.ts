@@ -16,7 +16,7 @@ import {
 import { bytestr as B, once, StreamPair, tick } from '../src/utils';
 import { createWriter } from '../src/writer';
 import { Readable } from 'node:stream';
-import { Pairs } from '../src/keyvalues';
+import { Params } from '../src/keyvalues';
 
 function clientForTest({
     skipServerValues = true,
@@ -174,7 +174,7 @@ describe('Client', () => {
         async function doIt() {
             const { sentRecords, request } = await requestForTest();
 
-            request.params(headers);
+            request.sendParams(headers);
             await tick();
 
             return { records: sentRecords.slice(1) };
@@ -183,7 +183,7 @@ describe('Client', () => {
         const { records } = await doIt();
         expect(records.length).toBe(1);
         const record = records[0];
-        const body = record.body as Pairs;
+        const body = record.body as Params;
         expect(body.Hello).toEqual('world');
         expect(body.Foo).toEqual('bar');
     });
@@ -192,7 +192,7 @@ describe('Client', () => {
         async function doIt() {
             const { sentRecords, request } = await requestForTest();
 
-            request.params({});
+            request.sendParams({});
             await tick();
 
             return { records: sentRecords.slice(1) };
@@ -209,7 +209,7 @@ describe('Client', () => {
     test('can send stdin as string', async () => {
         async function doIt() {
             const { request, sentRecords } = await requestForTest();
-            request.params({}).send('Hello world');
+            request.sendParams({}).send('Hello world');
             await tick();
             return sentRecords.slice(2);
         }
@@ -224,7 +224,7 @@ describe('Client', () => {
         async function doIt() {
             const { request, sentRecords } = await requestForTest();
             const source = Readable.from(['Hello world\n', B`01 23 45 67 89`]);
-            request.params({}).send(source);
+            request.sendParams({}).send(source);
 
             await tick();
             return sentRecords.slice(2);
@@ -255,7 +255,7 @@ describe('Client', () => {
                 received.push(chunk);
             });
 
-            request.params({});
+            request.sendParams({});
             request.done();
 
             await tick();
@@ -295,7 +295,7 @@ describe('Client', () => {
             request.on('end', () => {
                 closed = true;
             });
-            request.params({ foo: 'bar' }).done();
+            request.sendParams({ foo: 'bar' }).done();
 
             await tick();
             return { client, request, closed };

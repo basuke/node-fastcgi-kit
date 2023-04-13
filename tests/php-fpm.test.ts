@@ -8,7 +8,7 @@ const describeIf = (condition: boolean) =>
 const phpFpm = 'php-fpm';
 const phpFpmExists = findExec(phpFpm);
 
-function params(script_file: string = '/hello.php') {
+function sendParams(script_file: string = '/hello.php') {
     const script_dir = join(__dirname, 'php');
     const script_path = join(script_dir, script_file);
 
@@ -64,7 +64,7 @@ describeIf(phpFpmExists)('Test with php-fpm', () => {
             let body: string = '';
             let stderr: string = '';
 
-            request.params(params());
+            request.sendParams(sendParams());
 
             request.on('stdout', (buffer: Buffer) => {
                 body += buffer.toString();

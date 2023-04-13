@@ -1,4 +1,4 @@
-export type Pairs = { [name: string]: string };
+export type Params = { [name: string]: string };
 
 function encodeLength(buffer: Buffer): Buffer {
     const len = buffer.byteLength;
@@ -52,11 +52,11 @@ function decodePair(
     ];
 }
 
-export function encode(pairs: Pairs): Buffer {
+export function encode(params: Params): Buffer {
     const buffers: Buffer[] = [];
 
-    for (const name in pairs) {
-        const value = pairs[name];
+    for (const name in params) {
+        const value = params[name];
 
         const nameBytes = Buffer.from(name);
         const valueBytes = Buffer.from(value);
@@ -69,7 +69,7 @@ export function encode(pairs: Pairs): Buffer {
     return Buffer.concat(buffers);
 }
 
-export function decode(buffer: Buffer, pairs: Pairs): Buffer | null {
+export function decode(buffer: Buffer, params: Params): Buffer | null {
     let offset = 0;
     while (offset < buffer.byteLength) {
         const result = decodePair(buffer, offset);
@@ -78,14 +78,14 @@ export function decode(buffer: Buffer, pairs: Pairs): Buffer | null {
         }
 
         const [name, value, newOffset] = result;
-        pairs[name] = value;
+        params[name] = value;
         offset = newOffset;
     }
     return null;
 }
 
 export class StreamDecoder {
-    pairs: Pairs = {};
+    params: Params = {};
     remaining: Buffer | null = null;
     readonly isStream: boolean;
 
@@ -97,7 +97,7 @@ export class StreamDecoder {
         buffer = this.remaining
             ? Buffer.concat([this.remaining, buffer])
             : buffer;
-        this.remaining = decode(buffer, this.pairs);
+        this.remaining = decode(buffer, this.params);
     }
 
     get canClose(): boolean {

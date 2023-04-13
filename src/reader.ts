@@ -78,11 +78,11 @@ export class Reader extends Writable {
         }
 
         if (decoder.canClose) {
-            record.body = decoder.pairs;
+            record.body = decoder.params;
             this.paramsDecoders.delete(record.requestId);
             return record;
         } else {
-            const message = 'decodeParams: Incomplete pairs.';
+            const message = 'decodeParams: Incomplete params.';
             this.emit('error', new Error(message));
             return null;
         }

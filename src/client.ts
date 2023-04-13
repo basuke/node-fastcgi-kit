@@ -12,7 +12,7 @@ import {
     Type,
 } from './record';
 import { createWriter, Writer } from './writer';
-import { Pairs } from './keyvalues';
+import { Params } from './keyvalues';
 import { MinBag, once } from './utils';
 
 export interface ServerValues {
@@ -28,12 +28,12 @@ export function createClient(options: ClientOptions): Client {
 
 export interface Client extends EventEmitter {
     get(url: string): Promise<Response>;
-    get(url: string, params: Pairs): Promise<Response>;
+    get(url: string, params: Params): Promise<Response>;
     // post(url: string, body: string | Buffer | Readable): Promise<Response>;
     // post(
     //     url: string,
     //     body: string | Buffer | Readable,
-    //     params: Pairs
+    //     params: Params
     // ): Promise<Response>;
 
     on(event: 'ready', listener: () => void): this;
@@ -56,7 +56,7 @@ export interface Request extends EventEmitter {
     readonly id: number;
     readonly closed: boolean;
 
-    params(pairs: Pairs): this;
+    sendParams(params: Params): this;
 
     send(body: string): this;
     send(body: Buffer): this;
@@ -70,7 +70,7 @@ export interface Request extends EventEmitter {
 
 export interface Response {
     statusCode: number;
-    headers: Pairs;
+    headers: Params;
     text: string;
     json(): any;
 }
@@ -95,14 +95,14 @@ export type ConnectOptions = {
 
 export type ServerOptions = {
     skipServerValues?: boolean;
-    params?: Pairs;
+    params?: Params;
 };
 
 export type ClientOptions = ConnectOptions & ServerOptions;
 
 const valuesToGet = ['FCGI_MAX_CONNS', 'FCGI_MAX_REQS', 'FCGI_MPXS_CONNS'];
 
-const defaultParams: Pairs = {
+const defaultParams: Params = {
     REMOTE_ADDR: '127.0.0.1',
     GATEWAY_PROTOCOL: 'CGI/1.1',
     SERVER_SOFTWARE: 'fastcgi-kit; node/' + process.version,
@@ -212,7 +212,7 @@ class ClientImpl extends EventEmitter implements Client {
         return connection;
     }
 
-    urlToParams(url: URL, method: string): Pairs {
+    urlToParams(url: URL, method: string): Params {
         const documentRoot = this.options?.params?.DOCUMENT_ROOT ?? __dirname;
         const scriptFile = url.pathname;
 
@@ -228,7 +228,7 @@ class ClientImpl extends EventEmitter implements Client {
         };
     }
 
-    async get(url: string, params: Pairs = {}): Promise<Response> {
+    async get(url: string, params: Params = {}): Promise<Response> {
         return new Promise(async (resolve, reject) => {
             const request = await this.begin();
             const result: Buffer[] = [];
@@ -245,7 +245,7 @@ class ClientImpl extends EventEmitter implements Client {
                 }
             });
 
-            request.params({
+            request.sendParams({
                 ...(this.options.params ?? {}),
                 ...this.urlToParams(new URL(url), 'GET'),
                 ...params,
@@ -259,7 +259,7 @@ class ClientImpl extends EventEmitter implements Client {
             this.keptConnection !== undefined
         );
 
-        const valuesToAsk = valuesToGet.reduce((result: Pairs, name) => {
+        const valuesToAsk = valuesToGet.reduce((result: Params, name) => {
             result[name] = '';
             return result;
         }, {});
@@ -350,7 +350,7 @@ class ClientImpl extends EventEmitter implements Client {
 
         switch (record.type) {
             case Type.FCGI_GET_VALUES_RESULT:
-                this.handleGetValuesResult(record.body as Pairs);
+                this.handleGetValuesResult(record.body as Params);
                 break;
 
             default:
@@ -364,7 +364,7 @@ class ClientImpl extends EventEmitter implements Client {
         return this.idBag.issue();
     }
 
-    handleGetValuesResult(body: Pairs | null) {
+    handleGetValuesResult(body: Params | null) {
         if (body) {
             const values = {
                 maxConns: parseInt(body.FCGI_MAX_CONNS ?? '1'),
@@ -410,7 +410,7 @@ class RequestImpl extends EventEmitter implements Request {
 
     write(
         type: Type,
-        body: Buffer | Pairs | BeginRequestBody | null = null
+        body: Buffer | Params | BeginRequestBody | null = null
     ): this {
         const record = this.makeRecord(type, body);
         this.connection.send(record);
@@ -419,7 +419,7 @@ class RequestImpl extends EventEmitter implements Request {
 
     makeRecord(
         type: Type,
-        body: Buffer | Pairs | BeginRequestBody | null = null
+        body: Buffer | Params | BeginRequestBody | null = null
     ): FCGIRecord {
         return makeRecord(type, this.id, body);
     }
@@ -431,10 +431,10 @@ class RequestImpl extends EventEmitter implements Request {
         );
     }
 
-    params(pairs: Pairs): this {
+    sendParams(params: Params): this {
         return this.write(Type.FCGI_PARAMS, {
             ...defaultParams,
-            ...pairs,
+            ...params,
         });
     }
 
@@ -523,7 +523,7 @@ class RequestImpl extends EventEmitter implements Request {
 
 class ResponseImpl implements Response {
     statusCode: number;
-    headers: Pairs;
+    headers: Params;
     text: string;
 
     constructor(statusCode: number, stdout: Buffer[]) {
@@ -532,11 +532,11 @@ class ResponseImpl implements Response {
         const [headers, body] = Buffer.concat(stdout)
             .toString()
             .split('\r\n\r\n', 2);
-        this.headers = headers.split('\r\n').reduce((pairs, line) => {
+        this.headers = headers.split('\r\n').reduce((params, line) => {
             const [name, value] = line.split(':', 2);
-            pairs[name.trim().toLowerCase()] = value.trim();
-            return pairs;
-        }, {} as Pairs);
+            params[name.trim().toLowerCase()] = value.trim();
+            return params;
+        }, {} as Params);
         this.text = body;
     }
 
