@@ -1,9 +1,5 @@
-import {
-    ClientOptions,
-    ConnectOptions,
-    createClient,
-    Request,
-} from '../src/client';
+import type { ClientOptions, ConnectOptions } from '../src/options';
+import { createClient, Request } from '../src/client';
 import { Reader } from '../src/reader';
 import {
     BeginRequestBody,
@@ -16,7 +12,7 @@ import {
 import { bytestr as B, once, StreamPair, tick } from '../src/utils';
 import { createWriter } from '../src/writer';
 import { Readable } from 'node:stream';
-import { Params } from '../src/keyvalues';
+import { Params } from '../src/params';
 
 function clientForTest({
     skipServerValues = true,
@@ -42,6 +38,7 @@ function clientForTest({
     const writer = createWriter(other);
 
     const options: ClientOptions = {
+        address: 'localhost:9000',
         connector: async (options: ConnectOptions): Promise<StreamPair> =>
             stream,
         skipServerValues,

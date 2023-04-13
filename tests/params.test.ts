@@ -1,4 +1,4 @@
-import { decode, encode, Params } from '../src/keyvalues';
+import { decode, encode, Params } from '../src/params';
 import { bytestr as B } from '../src/utils';
 
 describe('Key-Value paire encoding', () => {

@@ -8,7 +8,7 @@ import {
     Type,
 } from './record';
 import { Readable, Writable } from 'node:stream';
-import { Params } from './keyvalues';
+import { Params } from './params';
 
 export interface Writer {
     readonly alignment: number;

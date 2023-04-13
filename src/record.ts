@@ -1,4 +1,4 @@
-import { Params } from './keyvalues';
+import { Params } from './params';
 import {
     alignedSize,
     dword,
@@ -8,7 +8,7 @@ import {
     loWord,
     word,
 } from './utils';
-import { encode as encodePairs } from './keyvalues';
+import { encode as encodeParams } from './params';
 
 export enum Type {
     FCGI_BEGIN_REQUEST = 1,
@@ -151,7 +151,7 @@ function encodeBody(body: RecordBody): EncodableBody {
     }
 
     if (typeof body === 'object') {
-        return encodePairs(body);
+        return encodeParams(body);
     }
 
     throw new Error(`Cannot encode body value: ${body}`);

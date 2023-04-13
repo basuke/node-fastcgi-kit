@@ -1,6 +1,6 @@
 import { Duplex, Readable } from 'node:stream';
 import { EventEmitter } from 'node:events';
-import { createConnection, NetConnectOpts } from 'node:net';
+import { createConnection } from 'node:net';
 import path from 'node:path';
 import { Reader } from './reader';
 import {
@@ -12,8 +12,9 @@ import {
     Type,
 } from './record';
 import { createWriter, Writer } from './writer';
-import { Params } from './keyvalues';
+import { Params } from './params';
 import { MinBag, once } from './utils';
+import { ClientOptions, ConnectOptions, parseConnectOptions } from './options';
 
 export interface ServerValues {
     maxConns: number;
@@ -75,8 +76,6 @@ export interface Response {
     json(): any;
 }
 
-export type Connector = (options: ConnectOptions) => Promise<Duplex>;
-
 export interface Connection extends EventEmitter {
     send(record: FCGIRecord): void;
     end(): void;
@@ -85,20 +84,6 @@ export interface Connection extends EventEmitter {
     on(event: 'record', listener: (record: FCGIRecord) => void): this;
     on(event: 'close', listener: (status: number) => void): this;
 }
-
-export type ConnectOptions = {
-    host?: string;
-    port?: number;
-    connector?: Connector;
-    debug?: boolean;
-};
-
-export type ServerOptions = {
-    skipServerValues?: boolean;
-    params?: Params;
-};
-
-export type ClientOptions = ConnectOptions & ServerOptions;
 
 const valuesToGet = ['FCGI_MAX_CONNS', 'FCGI_MAX_REQS', 'FCGI_MPXS_CONNS'];
 
@@ -145,13 +130,9 @@ class ConnectionImpl extends EventEmitter implements Connection {
     }
 }
 
-function connectToHost(options: ConnectOptions): Promise<Duplex> {
-    const opts: NetConnectOpts = {
-        port: options.port ?? 9000,
-        host: options.host ?? 'localhost',
-    };
-
-    return new Promise((resolve, reject) => {
+async function connectToHost(options: ConnectOptions): Promise<Duplex> {
+    const opts = await parseConnectOptions(options);
+    return new Promise(async (resolve, reject) => {
         const conn = createConnection(opts);
         conn.once('connect', () => {
             conn.removeAllListeners();
