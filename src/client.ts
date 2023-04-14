@@ -14,7 +14,12 @@ import {
 import { createWriter, Writer } from './writer';
 import { Params } from './params';
 import { MinBag, once } from './utils';
-import { ClientOptions, ConnectOptions, parseConnectOptions } from './options';
+import {
+    ClientOptions,
+    ConnectOptions,
+    parseConnectOptions,
+    urlToParams,
+} from './options';
 
 export interface ServerValues {
     maxConns: number;
@@ -193,23 +198,9 @@ class ClientImpl extends EventEmitter implements Client {
         return connection;
     }
 
-    urlToParams(url: URL, method: string): Params {
-        const documentRoot = this.options?.params?.DOCUMENT_ROOT ?? __dirname;
-        const scriptFile = url.pathname;
-
-        return {
-            DOCUMENT_ROOT: documentRoot,
-            REQUEST_METHOD: method,
-            REQUEST_URI: url.toString(),
-            QUERY_STRING: url.search.substring(1),
-
-            PHP_SELF: scriptFile,
-            SCRIPT_NAME: scriptFile,
-            SCRIPT_FILENAME: path.join(documentRoot, scriptFile),
-        };
-    }
-
     async get(url: string, params: Params = {}): Promise<Response> {
+        const documentRoot = this.options?.params?.DOCUMENT_ROOT ?? __dirname;
+
         return new Promise(async (resolve, reject) => {
             const request = await this.begin();
             const result: Buffer[] = [];
@@ -228,7 +219,7 @@ class ClientImpl extends EventEmitter implements Client {
 
             request.sendParams({
                 ...(this.options.params ?? {}),
-                ...this.urlToParams(new URL(url), 'GET'),
+                ...urlToParams(new URL(url), 'GET', documentRoot),
                 ...params,
             });
             request.done();
@@ -468,6 +459,7 @@ class RequestImpl extends EventEmitter implements Request {
             }
             this.sendBuffer(chunk);
         });
+        stream.on('end', () => this.done());
         return this;
     }
 

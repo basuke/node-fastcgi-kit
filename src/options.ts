@@ -1,7 +1,8 @@
 import { Duplex } from 'node:stream';
 import { Params } from './params';
 import dns from 'node:dns';
-import type { NetConnectOpts } from 'node:net';
+import path from 'node:path';
+import { Request } from 'express';
 
 export type SocketConnectOptions = {
     host: string;
@@ -94,4 +95,34 @@ export async function parseAddress(
             hosts,
         };
     }
+}
+
+export function urlToParams(
+    url: URL,
+    method: string,
+    documentRoot: string
+): Params {
+    const scriptFile = url.pathname;
+
+    return {
+        DOCUMENT_ROOT: documentRoot,
+        REQUEST_METHOD: method,
+        REQUEST_URI: url.toString(),
+        QUERY_STRING: url.search.substring(1),
+
+        SCRIPT_NAME: scriptFile,
+        SCRIPT_FILENAME: path.join(documentRoot, scriptFile),
+    };
+}
+
+export function requestToParams(req: Request, documentRoot: string): Params {
+    const params = urlToParams(new URL(req.url), req.method, documentRoot);
+    for (const header in req.headers) {
+        const value = req.headers[header];
+        if (value === undefined) continue;
+
+        const name = header.toLowerCase().replaceAll('-', '_');
+        params[name] = Array.isArray(value) ? value.join('\n') : value;
+    }
+    return params;
 }
