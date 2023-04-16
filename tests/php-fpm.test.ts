@@ -45,6 +45,27 @@ describeIf(phpFpmExists)('Test with php-fpm', () => {
         });
     });
 
+    test('php-fpm, POST', (done) => {
+        const client = createClient({
+            address: 'localhost:9000',
+            debug: true,
+            params: {
+                DOCUMENT_ROOT: __dirname,
+            },
+        });
+
+        client.on('ready', async () => {
+            const response = await client.post(
+                'http://localhost/php/post.php',
+                'name=Basuke'
+            );
+
+            expect(response.statusCode).toBe(200);
+            expect(response.text).toContain('Basuke');
+            done();
+        });
+    });
+
     test('connect to php-fpm: low-level', (done) => {
         const client = createClient({
             host: 'localhost',

@@ -35,12 +35,10 @@ export function createClient(options: ClientOptions): Client {
 export interface Client extends EventEmitter {
     get(url: string): Promise<Response>;
     get(url: string, params: Params): Promise<Response>;
-    // post(url: string, body: string | Buffer | Readable): Promise<Response>;
-    // post(
-    //     url: string,
-    //     body: string | Buffer | Readable,
-    //     params: Params
-    // ): Promise<Response>;
+    post(url: string, body: string | Buffer): Promise<Response>;
+    post(url: string, body: Readable): Promise<Response>;
+    post(url: string, body: string | Buffer, params: Params): Promise<Response>;
+    post(url: string, body: Readable, params: Params): Promise<Response>;
 
     on(event: 'ready', listener: () => void): this;
     on(event: 'end', listener: () => void): this;
@@ -223,6 +221,55 @@ class ClientImpl extends EventEmitter implements Client {
                 ...params,
             });
             request.done();
+        });
+    }
+
+    async post(
+        url: string,
+        body: string | Buffer | Readable,
+        params: Params = {}
+    ): Promise<Response> {
+        const documentRoot = this.options?.params?.DOCUMENT_ROOT ?? __dirname;
+        let contentLength = 0;
+
+        if (body instanceof Buffer) {
+            contentLength = body.byteLength;
+        } else if (typeof body === 'string') {
+            contentLength = Buffer.from(body).byteLength;
+        }
+
+        return new Promise(async (resolve, reject) => {
+            const request = await this.begin();
+            const result: Buffer[] = [];
+            let error: string = '';
+
+            request.on('stdout', (buffer: Buffer) => result.push(buffer));
+            request.on('stderr', (line: string) => (error += line));
+
+            request.on('end', (appStatus) => {
+                if (appStatus) {
+                    reject(new Error(error));
+                } else {
+                    resolve(new ResponseImpl(200, result));
+                }
+            });
+
+            request.sendParams({
+                CONTENT_TYPE: 'application/x-www-form-urlencoded',
+                REQUEST_METHOD: 'POST',
+                CONTENT_LENGTH: `${contentLength}`,
+                ...(this.options.params ?? {}),
+                ...urlToParams(new URL(url), 'POST', documentRoot),
+                ...params,
+            });
+
+            if (body instanceof Readable) {
+                request.send(body);
+            } else if (body instanceof Buffer) {
+                request.send(body);
+            } else {
+                request.send(body);
+            }
         });
     }
 
