@@ -213,7 +213,7 @@ describe('Client', () => {
         }
 
         const records = await doIt();
-        expect(records.length).toBe(1);
+        expect(records.length).toBe(2);
         const body = records[0].body as Buffer;
         expect(body).toEqual(B`${'Hello world'}`);
     });

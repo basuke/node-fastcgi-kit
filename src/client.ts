@@ -411,12 +411,13 @@ class RequestImpl extends EventEmitter implements Request {
     }
 
     send(arg: string | Buffer | Readable): this {
-        if (typeof arg === 'string') {
-            return this.sendBuffer(Buffer.from(arg));
-        } else if (arg instanceof Buffer) {
-            return this.sendBuffer(arg);
-        } else {
+        if (arg instanceof Readable) {
             return this.sendFromStream(arg);
+        } else {
+            if (typeof arg === 'string') {
+                arg = Buffer.from(arg);
+            }
+            return this.sendBuffer(arg).done();
         }
     }
 
