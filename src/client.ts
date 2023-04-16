@@ -211,7 +211,7 @@ class ClientImpl extends EventEmitter implements Client {
                 if (appStatus) {
                     reject(new Error(error));
                 } else {
-                    resolve(new ResponseImpl(200, result));
+                    resolve(new ResponseImpl(result));
                 }
             });
 
@@ -250,7 +250,7 @@ class ClientImpl extends EventEmitter implements Client {
                 if (appStatus) {
                     reject(new Error(error));
                 } else {
-                    resolve(new ResponseImpl(200, result));
+                    resolve(new ResponseImpl(result));
                 }
             });
 
@@ -543,19 +543,20 @@ class RequestImpl extends EventEmitter implements Request {
 }
 
 class ResponseImpl implements Response {
-    statusCode: number;
+    statusCode: number = 200;
     headers: Params;
     text: string;
 
-    constructor(statusCode: number, stdout: Buffer[]) {
-        this.statusCode = statusCode ?? 200;
-
+    constructor(stdout: Buffer[]) {
         const [headers, body] = Buffer.concat(stdout)
             .toString()
             .split('\r\n\r\n', 2);
         this.headers = headers.split('\r\n').reduce((params, line) => {
             const [name, value] = line.split(':', 2);
             params[name.trim().toLowerCase()] = value.trim();
+            if (name.trim().toLowerCase() === 'status') {
+                this.statusCode = parseInt(value);
+            }
             return params;
         }, {} as Params);
         this.text = body;
