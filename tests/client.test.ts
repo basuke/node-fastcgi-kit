@@ -42,6 +42,7 @@ function clientForTest({
         connector: async (options: ConnectOptions): Promise<StreamPair> =>
             stream,
         skipServerValues,
+        debug: false,
     };
 
     const client = createClient(options);
@@ -228,7 +229,7 @@ describe('Client', () => {
         }
 
         const records = await doIt();
-        expect(records.length).toBe(2);
+        expect(records.length).toBe(3);
         const body1 = records[0].body as Buffer;
         expect(body1).toEqual(B`${'Hello world\n'}`);
 
