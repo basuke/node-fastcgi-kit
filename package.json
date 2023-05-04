@@ -3,6 +3,7 @@
     "version": "0.8.0",
     "description": "Modules to implement FastCGI",
     "main": "dist/index.js",
+    "module": "dist/esm/index.mjs",
     "type": "commonjs",
     "typings": "dist/index.d.ts",
     "files": [

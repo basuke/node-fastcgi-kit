@@ -14,8 +14,13 @@ module.exports = [
         plugins: [esbuild.default()],
         output: [
             {
-                file: `${name}.js`,
+                file: `dist/index.js`,
                 format: 'cjs',
+                sourcemap: true,
+            },
+            {
+                file: `dist/esm/index.mjs`,
+                format: 'es',
                 sourcemap: true,
             },
         ],

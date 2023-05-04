@@ -1,4 +1,6 @@
 node_modules/
 yarn-error.log
-dist/
 coverage/
+dist/**/*.map
+dist/**/*.js
+dist/**/*.mjs
