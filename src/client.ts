@@ -1,7 +1,6 @@
 import { Duplex, Readable } from 'node:stream';
 import { EventEmitter } from 'node:events';
 import { createConnection } from 'node:net';
-import path from 'node:path';
 import { Reader } from './reader';
 import {
     BeginRequestBody,
@@ -94,7 +93,6 @@ const defaultParams: Params = {
     REMOTE_ADDR: '127.0.0.1',
     GATEWAY_PROTOCOL: 'CGI/1.1',
     SERVER_SOFTWARE: 'fastcgi-kit; node/' + process.version,
-    DOCUMENT_ROOT: __dirname,
 };
 
 class ConnectionImpl extends EventEmitter implements Connection {
@@ -197,9 +195,10 @@ class ClientImpl extends EventEmitter implements Client {
     }
 
     async get(url: string, params: Params = {}): Promise<Response> {
-        const documentRoot = this.options?.params?.DOCUMENT_ROOT ?? __dirname;
-
         return new Promise(async (resolve, reject) => {
+            const documentRoot = this.options?.params?.DOCUMENT_ROOT;
+            if (!documentRoot) reject(new Error('DOCUMENT_ROOT is not set'));
+
             const request = await this.begin();
             const result: Buffer[] = [];
             let error: string = '';
@@ -217,7 +216,7 @@ class ClientImpl extends EventEmitter implements Client {
 
             request.sendParams({
                 ...(this.options.params ?? {}),
-                ...urlToParams(new URL(url), 'GET', documentRoot),
+                ...urlToParams(new URL(url), 'GET', documentRoot as string),
                 ...params,
             });
             request.done();
@@ -229,7 +228,6 @@ class ClientImpl extends EventEmitter implements Client {
         body: string | Buffer | Readable,
         params: Params = {}
     ): Promise<Response> {
-        const documentRoot = this.options?.params?.DOCUMENT_ROOT ?? __dirname;
         let contentLength = 0;
 
         if (body instanceof Buffer) {
@@ -239,6 +237,9 @@ class ClientImpl extends EventEmitter implements Client {
         }
 
         return new Promise(async (resolve, reject) => {
+            const documentRoot = this.options?.params?.DOCUMENT_ROOT;
+            if (!documentRoot) reject(new Error('DOCUMENT_ROOT is not set'));
+
             const request = await this.begin();
             const result: Buffer[] = [];
             let error: string = '';
@@ -259,7 +260,7 @@ class ClientImpl extends EventEmitter implements Client {
                 REQUEST_METHOD: 'POST',
                 CONTENT_LENGTH: `${contentLength}`,
                 ...(this.options.params ?? {}),
-                ...urlToParams(new URL(url), 'POST', documentRoot),
+                ...urlToParams(new URL(url), 'POST', documentRoot as string),
                 ...params,
             });
 
