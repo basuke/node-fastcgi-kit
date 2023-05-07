@@ -38,6 +38,8 @@ export interface Client extends EventEmitter {
     post(url: string, body: Readable): Promise<Response>;
     post(url: string, body: string | Buffer, params: Params): Promise<Response>;
     post(url: string, body: Readable, params: Params): Promise<Response>;
+    options(url: string): Promise<Response>;
+    options(url: string, params: Params): Promise<Response>;
 
     on(event: 'ready', listener: () => void): this;
     on(event: 'end', listener: () => void): this;
@@ -144,7 +146,7 @@ async function connectToHost(options: ConnectOptions): Promise<Duplex> {
 }
 
 class ClientImpl extends EventEmitter implements Client {
-    readonly options: ClientOptions;
+    readonly clientOptions: ClientOptions;
     keptConnection: Connection | undefined;
     requests: Map<number, RequestImpl> = new Map();
     idBag: MinBag = new MinBag();
@@ -152,12 +154,12 @@ class ClientImpl extends EventEmitter implements Client {
     maxReqs = 1;
     mpxsConns = false;
 
-    constructor(options: ClientOptions) {
+    constructor(clientOptions: ClientOptions) {
         super();
 
-        this.options = options;
+        this.clientOptions = clientOptions;
 
-        if (this.options.skipServerValues) {
+        if (this.clientOptions.skipServerValues) {
             setImmediate(() => this.emit('ready'));
         } else {
             this.getServerValues()
@@ -177,9 +179,9 @@ class ClientImpl extends EventEmitter implements Client {
     async connect(keepConn: boolean): Promise<Connection> {
         if (keepConn && this.keptConnection) return this.keptConnection;
 
-        const { connector = connectToHost, debug = false } = this.options;
+        const { connector = connectToHost, debug = false } = this.clientOptions;
         const connection = new ConnectionImpl(
-            await connector(this.options),
+            await connector(this.clientOptions),
             debug
         );
 
@@ -196,7 +198,7 @@ class ClientImpl extends EventEmitter implements Client {
 
     async get(url: string, params: Params = {}): Promise<Response> {
         return new Promise(async (resolve, reject) => {
-            const documentRoot = this.options?.params?.DOCUMENT_ROOT;
+            const documentRoot = this.clientOptions?.params?.DOCUMENT_ROOT;
             if (!documentRoot) reject(new Error('DOCUMENT_ROOT is not set'));
 
             const request = await this.begin();
@@ -215,8 +217,37 @@ class ClientImpl extends EventEmitter implements Client {
             });
 
             request.sendParams({
-                ...(this.options.params ?? {}),
+                ...(this.clientOptions.params ?? {}),
                 ...urlToParams(new URL(url), 'GET', documentRoot as string),
+                ...params,
+            });
+            request.done();
+        });
+    }
+
+    async options(url: string, params: Params = {}): Promise<Response> {
+        return new Promise(async (resolve, reject) => {
+            const documentRoot = this.clientOptions?.params?.DOCUMENT_ROOT;
+            if (!documentRoot) reject(new Error('DOCUMENT_ROOT is not set'));
+
+            const request = await this.begin();
+            const result: Buffer[] = [];
+            let error: string = '';
+
+            request.on('stdout', (buffer: Buffer) => result.push(buffer));
+            request.on('stderr', (line: string) => (error += line));
+
+            request.on('end', (appStatus) => {
+                if (appStatus) {
+                    reject(new Error(error));
+                } else {
+                    resolve(new ResponseImpl(result));
+                }
+            });
+
+            request.sendParams({
+                ...(this.clientOptions.params ?? {}),
+                ...urlToParams(new URL(url), 'OPTIONS', documentRoot as string),
                 ...params,
             });
             request.done();
@@ -237,7 +268,7 @@ class ClientImpl extends EventEmitter implements Client {
         }
 
         return new Promise(async (resolve, reject) => {
-            const documentRoot = this.options?.params?.DOCUMENT_ROOT;
+            const documentRoot = this.clientOptions?.params?.DOCUMENT_ROOT;
             if (!documentRoot) reject(new Error('DOCUMENT_ROOT is not set'));
 
             const request = await this.begin();
@@ -259,7 +290,7 @@ class ClientImpl extends EventEmitter implements Client {
                 CONTENT_TYPE: 'application/x-www-form-urlencoded',
                 REQUEST_METHOD: 'POST',
                 CONTENT_LENGTH: `${contentLength}`,
-                ...(this.options.params ?? {}),
+                ...(this.clientOptions.params ?? {}),
                 ...urlToParams(new URL(url), 'POST', documentRoot as string),
                 ...params,
             });
@@ -331,7 +362,7 @@ class ClientImpl extends EventEmitter implements Client {
         );
 
         request.sendBegin(role, keepConn);
-        if (this.options.debug) {
+        if (this.clientOptions.debug) {
             request.on('stdout', (buffer: Buffer) => {
                 console.log(buffer);
                 console.log(buffer.toString());
