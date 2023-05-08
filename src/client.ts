@@ -599,6 +599,11 @@ class ResponseImpl implements Response {
     }
 
     json(): any {
-        return JSON.parse(this.text);
+        try {
+            return JSON.parse(this.text);
+        } catch (e) {
+            console.error('Invalid JSON', this.text);
+            throw e;
+        }
     }
 }
