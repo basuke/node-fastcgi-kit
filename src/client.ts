@@ -52,7 +52,12 @@ export interface Client extends EventEmitter {
 
     // low level interface
 
-    request(args: { url: URL; params: Params; body?: Body }): Promise<Response>;
+    request(args: {
+        url: URL;
+        method: string;
+        params: Params;
+        body?: Body;
+    }): Promise<Response>;
 
     getServerValues(): Promise<ServerValues>;
 
