@@ -1,7 +1,6 @@
 import { Duplex, Readable } from 'node:stream';
 import { EventEmitter } from 'node:events';
 import { createConnection } from 'node:net';
-import path from 'node:path';
 import { Reader } from './reader';
 import {
     BeginRequestBody,
@@ -52,6 +51,8 @@ export interface Client extends EventEmitter {
     on(event: 'error', listener: (err: Error) => void): this;
 
     // low level interface
+
+    request(args: { url: URL; params: Params; body?: Body }): Promise<Response>;
 
     getServerValues(): Promise<ServerValues>;
 
@@ -203,15 +204,15 @@ class ClientImpl extends EventEmitter implements Client {
     }
 
     async get(url: URL, params: Params): Promise<Response> {
-        return this.request(url, 'GET', undefined, params);
+        return this.request({ url, method: 'GET', params });
     }
 
     async head(url: URL, params: Params): Promise<Response> {
-        return this.request(url, 'HEAD', undefined, params);
+        return this.request({ url, method: 'HEAD', params });
     }
 
     async options(url: URL, params: Params): Promise<Response> {
-        return this.request(url, 'OPTIONS', undefined, params);
+        return this.request({ url, method: 'OPTIONS', params });
     }
 
     async delete(
@@ -223,31 +224,36 @@ class ClientImpl extends EventEmitter implements Client {
 
         if (params === undefined) {
             params = bodyOrParams as Params;
+            return this.request({ url, method: 'DELETE', params });
         } else {
             body = bodyOrParams as Body;
+            return this.request({ url, method: 'DELETE', body, params });
         }
-
-        return this.request(url, 'DELETE', body, params);
     }
 
     async post(url: URL, body: Body, params: Params): Promise<Response> {
-        return this.request(url, 'POST', body, params);
+        return this.request({ url, method: 'POST', body, params });
     }
 
     async put(url: URL, body: Body, params: Params): Promise<Response> {
-        return this.request(url, 'PUT', body, params);
+        return this.request({ url, method: 'PUT', body, params });
     }
 
     async patch(url: URL, body: Body, params: Params): Promise<Response> {
-        return this.request(url, 'PATCH', body, params);
+        return this.request({ url, method: 'PATCH', body, params });
     }
 
-    async request(
-        url: URL,
-        method: string,
-        body: Body | undefined,
-        params: Params
-    ): Promise<Response> {
+    async request({
+        url,
+        method,
+        body = undefined,
+        params,
+    }: {
+        url: URL;
+        method: string;
+        body?: Body;
+        params: Params;
+    }): Promise<Response> {
         const documentRoot =
             this.clientOptions?.params?.DOCUMENT_ROOT ?? process.cwd();
 

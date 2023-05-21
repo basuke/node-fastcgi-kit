@@ -1,7 +1,5 @@
-const esbuild = require('rollup-plugin-esbuild')
+const typescript = require('@rollup/plugin-typescript');
 
-const name = 'dist/index';
-console.log(esbuild);
 
 const bundle = config => ({
     ...config,
@@ -11,7 +9,7 @@ const bundle = config => ({
 
 module.exports = [
     bundle({
-        plugins: [esbuild.default()],
+        plugins: [typescript.default(),],
         output: [
             {
                 file: `dist/index.js`,

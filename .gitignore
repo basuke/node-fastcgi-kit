@@ -4,3 +4,4 @@ coverage/
 dist/**/*.map
 dist/**/*.js
 dist/**/*.mjs
+dist/**/*.d.ts
