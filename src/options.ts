@@ -97,6 +97,26 @@ export async function parseAddress(
     }
 }
 
+export function scriptPathToParams(
+    script: string,
+    method: string,
+    documentRoot: string
+): Params {
+    const scriptFile = path.isAbsolute(script)
+        ? script
+        : path.join(documentRoot, script);
+
+    return {
+        DOCUMENT_ROOT: documentRoot,
+        REQUEST_METHOD: method,
+        REQUEST_URI: scriptFile,
+        QUERY_STRING: '',
+
+        SCRIPT_NAME: scriptFile,
+        SCRIPT_FILENAME: scriptFile,
+    };
+}
+
 export function urlToParams(
     url: URL,
     method: string,

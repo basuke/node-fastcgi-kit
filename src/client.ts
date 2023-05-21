@@ -1,6 +1,7 @@
 import { Duplex, Readable } from 'node:stream';
 import { EventEmitter } from 'node:events';
 import { createConnection } from 'node:net';
+import path from 'node:path';
 import { Reader } from './reader';
 import {
     BeginRequestBody,
@@ -31,15 +32,20 @@ export function createClient(options: ClientOptions): Client {
     return client;
 }
 
+export type Body = string | Buffer | { stream: Readable; length: number };
+
 export interface Client extends EventEmitter {
-    get(url: string): Promise<Response>;
-    get(url: string, params: Params): Promise<Response>;
-    post(url: string, body: string | Buffer): Promise<Response>;
-    post(url: string, body: Readable): Promise<Response>;
-    post(url: string, body: string | Buffer, params: Params): Promise<Response>;
-    post(url: string, body: Readable, params: Params): Promise<Response>;
-    options(url: string): Promise<Response>;
-    options(url: string, params: Params): Promise<Response>;
+    // no payload requests
+    get(url: URL, params: Params): Promise<Response>;
+    head(url: URL, params: Params): Promise<Response>;
+    options(url: URL, params: Params): Promise<Response>;
+    delete(url: URL, params: Params): Promise<Response>;
+
+    // requests with payload
+    post(url: URL, body: Body, params: Params): Promise<Response>;
+    put(url: URL, body: Body, params: Params): Promise<Response>;
+    delete(url: URL, body: Body, params: Params): Promise<Response>;
+    patch(url: URL, body: Body, params: Params): Promise<Response>;
 
     on(event: 'ready', listener: () => void): this;
     on(event: 'end', listener: () => void): this;
@@ -196,81 +202,90 @@ class ClientImpl extends EventEmitter implements Client {
         return connection;
     }
 
-    async get(url: string, params: Params = {}): Promise<Response> {
-        return new Promise(async (resolve, reject) => {
-            const documentRoot = this.clientOptions?.params?.DOCUMENT_ROOT;
-            if (!documentRoot) reject(new Error('DOCUMENT_ROOT is not set'));
-
-            const request = await this.begin();
-            const result: Buffer[] = [];
-            let error: string = '';
-
-            request.on('stdout', (buffer: Buffer) => result.push(buffer));
-            request.on('stderr', (line: string) => (error += line));
-
-            request.on('end', (appStatus) => {
-                if (appStatus) {
-                    reject(new Error(error));
-                } else {
-                    resolve(new ResponseImpl(result));
-                }
-            });
-
-            request.sendParams({
-                ...(this.clientOptions.params ?? {}),
-                ...urlToParams(new URL(url), 'GET', documentRoot as string),
-                ...params,
-            });
-            request.done();
-        });
+    async get(url: URL, params: Params): Promise<Response> {
+        return this.request(url, 'GET', undefined, params);
     }
 
-    async options(url: string, params: Params = {}): Promise<Response> {
-        return new Promise(async (resolve, reject) => {
-            const documentRoot = this.clientOptions?.params?.DOCUMENT_ROOT;
-            if (!documentRoot) reject(new Error('DOCUMENT_ROOT is not set'));
-
-            const request = await this.begin();
-            const result: Buffer[] = [];
-            let error: string = '';
-
-            request.on('stdout', (buffer: Buffer) => result.push(buffer));
-            request.on('stderr', (line: string) => (error += line));
-
-            request.on('end', (appStatus) => {
-                if (appStatus) {
-                    reject(new Error(error));
-                } else {
-                    resolve(new ResponseImpl(result));
-                }
-            });
-
-            request.sendParams({
-                ...(this.clientOptions.params ?? {}),
-                ...urlToParams(new URL(url), 'OPTIONS', documentRoot as string),
-                ...params,
-            });
-            request.done();
-        });
+    async head(url: URL, params: Params): Promise<Response> {
+        return this.request(url, 'HEAD', undefined, params);
     }
 
-    async post(
-        url: string,
-        body: string | Buffer | Readable,
-        params: Params = {}
+    async options(url: URL, params: Params): Promise<Response> {
+        return this.request(url, 'OPTIONS', undefined, params);
+    }
+
+    async delete(
+        url: URL,
+        bodyOrParams: Params | Body,
+        params: Params | undefined = undefined
     ): Promise<Response> {
-        let contentLength = 0;
+        let body: Body | undefined = undefined;
 
-        if (body instanceof Buffer) {
-            contentLength = body.byteLength;
-        } else if (typeof body === 'string') {
-            contentLength = Buffer.from(body).byteLength;
+        if (params === undefined) {
+            params = bodyOrParams as Params;
+        } else {
+            body = bodyOrParams as Body;
+        }
+
+        return this.request(url, 'DELETE', body, params);
+    }
+
+    async post(url: URL, body: Body, params: Params): Promise<Response> {
+        return this.request(url, 'POST', body, params);
+    }
+
+    async put(url: URL, body: Body, params: Params): Promise<Response> {
+        return this.request(url, 'PUT', body, params);
+    }
+
+    async patch(url: URL, body: Body, params: Params): Promise<Response> {
+        return this.request(url, 'PATCH', body, params);
+    }
+
+    async request(
+        url: URL,
+        method: string,
+        body: Body | undefined,
+        params: Params
+    ): Promise<Response> {
+        const documentRoot =
+            this.clientOptions?.params?.DOCUMENT_ROOT ?? process.cwd();
+
+        params = {
+            ...(this.clientOptions.params ?? {}),
+            ...urlToParams(url, method, documentRoot),
+            ...params,
+        };
+
+        if (body !== undefined) {
+            let contentLength = 0;
+
+            if (body instanceof Buffer) {
+                contentLength = body.byteLength;
+            } else if (typeof body === 'string') {
+                contentLength = Buffer.from(body).byteLength;
+            } else {
+                contentLength = body.length;
+            }
+
+            if (!('CONTENT_TYPE' in params)) {
+                params.CONTENT_TYPE = 'application/x-www-form-urlencoded';
+            }
+
+            if ('CONTENT_LENGTH' in params) {
+                if (params.CONTENT_LENGTH !== `${contentLength}`) {
+                    return Promise.reject(
+                        new Error(
+                            'Content length is already set and does not match body length'
+                        )
+                    );
+                }
+            } else {
+                params.CONTENT_LENGTH = `${contentLength}`;
+            }
         }
 
         return new Promise(async (resolve, reject) => {
-            const documentRoot = this.clientOptions?.params?.DOCUMENT_ROOT;
-            if (!documentRoot) reject(new Error('DOCUMENT_ROOT is not set'));
-
             const request = await this.begin();
             const result: Buffer[] = [];
             let error: string = '';
@@ -286,21 +301,18 @@ class ClientImpl extends EventEmitter implements Client {
                 }
             });
 
-            request.sendParams({
-                CONTENT_TYPE: 'application/x-www-form-urlencoded',
-                REQUEST_METHOD: 'POST',
-                CONTENT_LENGTH: `${contentLength}`,
-                ...(this.clientOptions.params ?? {}),
-                ...urlToParams(new URL(url), 'POST', documentRoot as string),
-                ...params,
-            });
+            request.sendParams(params);
 
-            if (body instanceof Readable) {
-                request.send(body);
-            } else if (body instanceof Buffer) {
-                request.send(body);
+            if (body !== undefined) {
+                if (typeof body === 'string') {
+                    request.send(body);
+                } else if (body instanceof Buffer) {
+                    request.send(body);
+                } else {
+                    request.send(body.stream);
+                }
             } else {
-                request.send(body);
+                request.done();
             }
         });
     }

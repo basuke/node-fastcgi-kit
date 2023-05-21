@@ -37,7 +37,10 @@ describeIf(phpFpmExists)('Test with php-fpm', () => {
         });
 
         client.on('ready', async () => {
-            const response = await client.get('http://localhost/php/hello.php');
+            const response = await client.get(
+                new URL('http://localhost/php/hello.php'),
+                {}
+            );
 
             expect(response.statusCode).toBe(200);
             expect(response.text).toContain('Hello world from PHP');
@@ -48,7 +51,7 @@ describeIf(phpFpmExists)('Test with php-fpm', () => {
     test('php-fpm, POST', (done) => {
         const client = createClient({
             address: 'localhost:9000',
-            debug: true,
+            debug: false,
             params: {
                 DOCUMENT_ROOT: __dirname,
             },
@@ -56,8 +59,9 @@ describeIf(phpFpmExists)('Test with php-fpm', () => {
 
         client.on('ready', async () => {
             const response = await client.post(
-                'http://localhost/php/post.php',
-                'name=Basuke'
+                new URL('http://localhost/php/post.php'),
+                'name=Basuke',
+                {}
             );
 
             expect(response.statusCode).toBe(200);
