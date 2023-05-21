@@ -170,12 +170,12 @@ function encodableRecord(record: FCGIRecord): EncodableRecord {
 
 export function setBody(
     { type, requestId, body: _ }: FCGIRecord,
-    body: string | EncodableBody
+    newBody: string | EncodableBody
 ): EncodableRecord {
-    if (typeof body === 'string') {
-        body = Buffer.from(body);
+    if (typeof newBody === 'string') {
+        newBody = Buffer.from(newBody);
     }
-    return { type, requestId, body };
+    return { type, requestId, body: newBody };
 }
 
 function contentSize(record: EncodableRecord): number {

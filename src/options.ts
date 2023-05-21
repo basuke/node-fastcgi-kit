@@ -2,7 +2,6 @@ import { Duplex } from 'node:stream';
 import { Params } from './params';
 import dns from 'node:dns';
 import path from 'node:path';
-import { Request } from 'express';
 
 export type SocketConnectOptions = {
     host: string;
@@ -135,7 +134,16 @@ export function urlToParams(
     };
 }
 
-export function requestToParams(req: Request, documentRoot: string): Params {
+interface ExpressRequest {
+    url: string;
+    headers: Record<string, string | string[] | undefined>;
+    method: string;
+}
+
+export function requestToParams(
+    req: ExpressRequest,
+    documentRoot: string
+): Params {
     const params = urlToParams(new URL(req.url), req.method, documentRoot);
     for (const header in req.headers) {
         const value = req.headers[header];
