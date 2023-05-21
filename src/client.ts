@@ -89,6 +89,7 @@ export interface Response {
     statusCode: number;
     headers: Params;
     text: string;
+    body: Buffer;
     json(): any;
 }
 
