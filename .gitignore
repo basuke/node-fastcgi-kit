@@ -1,7 +1,7 @@
 node_modules/
-yarn-error.log
 coverage/
 dist/**/*.map
 dist/**/*.js
 dist/**/*.mjs
 dist/**/*.d.ts
+.vscode/
